@@ -1,0 +1,38 @@
+<h2>Seguimientos pendientes</h2>
+
+<p>Fecha actual: {{ hoy|date:"d-m-Y" }}</p>
+
+<hr>
+
+{% if seguimientos %}
+    <table border="1" cellpadding="10">
+        <tr>
+            <th>Fecha objetivo</th>
+            <th>Paciente</th>
+            <th>Teléfono</th>
+            <th>Servicio</th>
+            <th>Estado</th>
+            <th>Cita origen</th>
+            <th>Acción</th>
+        </tr>
+
+        {% for seguimiento in seguimientos %}
+            <tr>
+                <td>{{ seguimiento.fecha_objetivo|date:"d-m-Y" }}</td>
+                <td>{{ seguimiento.paciente }}</td>
+                <td>{{ seguimiento.paciente.telefono }}</td>
+                <td>{{ seguimiento.servicio }}</td>
+                <td>{{ seguimiento.get_estado_display }}</td>
+                <td>{{ seguimiento.cita_origen }}</td>
+                <td>
+                    <form method="post" action="{% url 'marcar_seguimiento_contactado' seguimiento.id %}">
+                        {% csrf_token %}
+                        <button type="submit">Marcar como contactado</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+    </table>
+{% else %}
+    <p>No hay seguimientos pendientes.</p>
+{% endif %}
