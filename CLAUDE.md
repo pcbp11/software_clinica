@@ -66,13 +66,24 @@ software_clinica/
 ## ✅ Features completadas
 - ✓ Modelos con validaciones
 - ✓ Control de horarios profesionales y validación de citas
-- ✓ Sistema de pagos con saldo pendiente
+- ✓ Sistema de pagos con saldo pendiente y comprobantes (voucher/boleta)
 - ✓ Seguimientos automáticos (cuando cita pasa a "asistió" y servicio requiere seguimiento)
 - ✓ Admin de Django funcional
 - ✓ Login/logout con autenticación Django
 - ✓ Sidebar con badge de seguimientos pendientes/vencidos
 - ✓ **Agenda rediseñada** (mayo 2026) — posicionamiento absoluto tipo Google Calendar, bloques proporcionales a duración, indicador de hora actual, scroll automático
 - ✓ **Nueva cita desde agenda** — modal con búsqueda de paciente, selector de servicio, validaciones
+- ✓ **Detalle de cita en modal** — estados, pago, historial, reagendar
+- ✓ **Indicador de pago (P/A)** — P=Pagado (verde), A=Abonado (naranja) en agenda y resumen de cita
+- ✓ **Colores de estado diferenciados**:
+  - Reservado: Azul claro
+  - Confirmado: Calipso/Cyan (azul-turquesa)
+  - En espera: Naranja
+  - Asistió: Verde oscuro (diferenciado del confirmado)
+  - No asistió: Gris
+  - Cancelada: Gris opaco
+  - Reprogramada: Púrpura
+- ✓ **Sección de Profesionales** — gestión integrada de datos, horarios y cuentas
 - ✓ **Seguimientos** — vista completa con botones contactado/agendado/descartado, contador en sidebar
 - ✓ Backend vistas y URLs listos para: Horarios profesionales, Servicios UI, Usuarios y roles
 

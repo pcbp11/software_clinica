@@ -73,14 +73,26 @@ def agenda_view(request):
 
     agenda_general = []
     horas_base = None
+    tiene_horarios_ese_dia = False
+
     for profesional in profesionales:
         agenda = obtener_agenda_completa(profesional, fecha)
-        if not horas_base and agenda:
-            horas_base = [b["hora"] for b in agenda]
+        if agenda:
+            tiene_horarios_ese_dia = True
+            if not horas_base:
+                horas_base = [b["hora"] for b in agenda]
         agenda_general.append({
             "profesional": profesional,
             "agenda": {b["hora"]: b for b in agenda},
+            "tiene_horarios": bool(agenda),
         })
+
+    # Si nadie atiende ese día, calcular rango horario global (09:00-18:00)
+    if not horas_base:
+        from datetime import time
+        horas_base = [
+            time(h, m) for h in range(9, 18) for m in [0, 15, 30, 45]
+        ]
 
     SLOT_H = 28  # px por bloque de 15 minutos
     horas_labels = []
@@ -119,7 +131,8 @@ def agenda_view(request):
                         dur = c.servicio.duracion_minutos
                         citas_render.append({
                             'cita': c,
-                            'estado': bloque['estado'],
+                            'estado_cita': c.estado,  # Color based on cita state
+                            'estado_pago': bloque['estado'],  # Payment indicator (pagado/abonado/sin_pago)
                             'top_px': top_px,
                             'height_px': max((dur // 15) * SLOT_H, SLOT_H) - 3,
                         })
@@ -268,9 +281,27 @@ def registrar_pago_cita(request, cita_id):
         metodo = request.POST.get('metodo', 'efectivo')
         if metodo not in [m[0] for m in Pago.METODOS_PAGO]:
             return JsonResponse({'error': 'Método no válido'}, status=400)
+
+        # Validar que al menos voucher o boleta esté presente
+        voucher = request.POST.get('voucher', '').strip()
+        boleta = request.POST.get('boleta', '').strip()
+        if not voucher and not boleta:
+            return JsonResponse({'error': 'Debes ingresar al menos un comprobante (Voucher o Boleta)'}, status=400)
+
+        # Construir observación con comprobantes
+        obs_base = request.POST.get('observacion', '').strip()
+        comprobantes = []
+        if voucher:
+            comprobantes.append(f"Voucher: {voucher}")
+        if boleta:
+            comprobantes.append(f"Boleta: {boleta}")
+        observacion = ' | '.join(comprobantes)
+        if obs_base:
+            observacion += f" | {obs_base}"
+
         pago = Pago.objects.create(
             cita=cita, monto=monto, metodo=metodo,
-            observacion=request.POST.get('observacion', '')
+            observacion=observacion
         )
         cita.refresh_from_db()
         return JsonResponse({
@@ -377,6 +408,107 @@ def guardar_horarios(request, profesional_id):
     return redirect('horarios')
 
 
+# ── PROFESIONALES ─────────────────────────────────────────────────────────
+@login_required
+def profesionales_view(request):
+    profesionales = Profesional.objects.select_related('sucursal_principal').order_by('nombres')
+    context = {
+        'profesionales': profesionales,
+        'total': profesionales.count(),
+        'activos': profesionales.filter(activo=True).count(),
+    }
+    return render(request, 'core/profesionales.html', context)
+
+
+@login_required
+def editar_profesional(request, profesional_id):
+    profesional = get_object_or_404(Profesional, id=profesional_id)
+
+    if request.method == 'POST':
+        # Actualizar datos básicos
+        profesional.nombres = request.POST.get('nombres', '').strip()
+        profesional.apellidos = request.POST.get('apellidos', '').strip()
+        profesional.nombre_publico = request.POST.get('nombre_publico', '').strip()
+        profesional.telefono = request.POST.get('telefono', '').strip()
+        profesional.save()
+
+        # Actualizar horarios
+        for dia, _ in DIAS_SEMANA:
+            activo = request.POST.get(f'activo_{dia}') == 'on'
+            hi_str = request.POST.get(f'hora_inicio_{dia}', '')
+            hf_str = request.POST.get(f'hora_fin_{dia}', '')
+            tiene_descanso = request.POST.get(f'tiene_descanso_{dia}') == 'on'
+            id_str = request.POST.get(f'inicio_descanso_{dia}', '')
+            fd_str = request.POST.get(f'fin_descanso_{dia}', '')
+            try:
+                hi = datetime.strptime(hi_str, '%H:%M').time() if hi_str else None
+                hf = datetime.strptime(hf_str, '%H:%M').time() if hf_str else None
+                id_ = datetime.strptime(id_str, '%H:%M').time() if id_str and tiene_descanso else None
+                fd_ = datetime.strptime(fd_str, '%H:%M').time() if fd_str and tiene_descanso else None
+            except ValueError:
+                continue
+            HorarioProfesional.objects.update_or_create(
+                profesional=profesional, dia_semana=dia,
+                defaults={
+                    'activo': activo, 'hora_inicio': hi, 'hora_fin': hf,
+                    'tiene_descanso': tiene_descanso,
+                    'inicio_descanso': id_, 'fin_descanso': fd_,
+                }
+            )
+
+        # Crear/actualizar usuario si se proporciona email
+        email = request.POST.get('email', '').strip()
+        if email:
+            user, created = User.objects.get_or_create(
+                username=email.split('@')[0],
+                defaults={
+                    'email': email,
+                    'first_name': profesional.nombres,
+                    'last_name': profesional.apellidos,
+                }
+            )
+            if created:
+                user.set_password(request.POST.get('password', 'temporal123'))
+                user.save()
+                grupo = Group.objects.filter(name='Profesional').first()
+                if grupo:
+                    user.groups.add(grupo)
+                messages.success(request, f'Usuario "{user.username}" creado para {profesional.nombres}.')
+            else:
+                messages.info(request, f'El usuario "{user.username}" ya existe.')
+
+        messages.success(request, f'Profesional "{profesional.nombres}" actualizado.')
+        return redirect('profesionales')
+
+    # GET: preparar datos para el formulario
+    horarios_config = []
+    for dia, dia_nombre in DIAS_SEMANA:
+        h = profesional.horarios.filter(dia_semana=dia).first()
+        horarios_config.append({
+            'dia_num': dia,
+            'dia_nombre': dia_nombre,
+            'horario': h
+        })
+
+    context = {
+        'profesional': profesional,
+        'horarios': horarios_config,
+    }
+    return render(request, 'core/editar_profesional.html', context)
+
+
+@login_required
+def toggle_profesional(request, profesional_id):
+    if request.method != 'POST':
+        return redirect('profesionales')
+    p = get_object_or_404(Profesional, id=profesional_id)
+    p.activo = not p.activo
+    p.save()
+    estado = 'activado' if p.activo else 'desactivado'
+    messages.success(request, f'Profesional "{p.nombres}" {estado}.')
+    return redirect('profesionales')
+
+
 # ── SERVICIOS ─────────────────────────────────────────────────────────────
 @login_required
 def servicios_view(request):
@@ -420,109 +552,4 @@ def crear_servicio(request):
             servicio.profesionales.set(Profesional.objects.filter(id__in=prof_ids))
         messages.success(request, f'Servicio "{servicio.nombre}" creado.')
     except Exception as e:
-        messages.error(request, f'Error al crear el servicio: {e}')
-    return redirect('servicios')
-
-
-@login_required
-def toggle_servicio(request, servicio_id):
-    if request.method != 'POST':
-        return redirect('servicios')
-    s = get_object_or_404(Servicio, id=servicio_id)
-    s.activo = not s.activo
-    s.save()
-    estado = 'activado' if s.activo else 'desactivado'
-    messages.success(request, f'Servicio "{s.nombre}" {estado}.')
-    return redirect('servicios')
-
-
-# ── USUARIOS ──────────────────────────────────────────────────────────────
-@login_required
-def usuarios_view(request):
-    if not request.user.is_staff:
-        messages.error(request, 'Solo administradores pueden gestionar usuarios.')
-        return redirect('dashboard')
-    for nombre in ['Admin', 'Recepcionista', 'Profesional']:
-        Group.objects.get_or_create(name=nombre)
-    context = {
-        'usuarios': User.objects.prefetch_related('groups').order_by('first_name', 'last_name'),
-        'grupos': Group.objects.all().order_by('name'),
-    }
-    return render(request, 'core/usuarios.html', context)
-
-
-@login_required
-def crear_usuario(request):
-    if not request.user.is_staff:
-        return redirect('dashboard')
-    if request.method != 'POST':
-        return redirect('usuarios')
-    try:
-        username = request.POST.get('username', '').strip()
-        if User.objects.filter(username=username).exists():
-            messages.error(request, f'El usuario "{username}" ya existe.')
-            return redirect('usuarios')
-        user = User.objects.create_user(
-            username=username,
-            first_name=request.POST.get('first_name', '').strip(),
-            last_name=request.POST.get('last_name', '').strip(),
-            email=request.POST.get('email', '').strip(),
-            password=request.POST.get('password', ''),
-        )
-        if request.POST.get('is_staff') == 'on':
-            user.is_staff = True
-            user.save()
-        grupo_id = request.POST.get('grupo')
-        if grupo_id:
-            grupo = Group.objects.filter(id=grupo_id).first()
-            if grupo:
-                user.groups.add(grupo)
-        messages.success(request, f'Usuario "{username}" creado.')
-    except Exception as e:
-        messages.error(request, f'Error al crear usuario: {e}')
-    return redirect('usuarios')
-
-
-@login_required
-def toggle_usuario(request, user_id):
-    if not request.user.is_staff:
-        return redirect('dashboard')
-    if request.method != 'POST':
-        return redirect('usuarios')
-    user = get_object_or_404(User, id=user_id)
-    if user == request.user:
-        messages.error(request, 'No puedes desactivar tu propio usuario.')
-        return redirect('usuarios')
-    user.is_active = not user.is_active
-    user.save()
-    estado = 'activado' if user.is_active else 'desactivado'
-    messages.success(request, f'Usuario "{user.username}" {estado}.')
-    return redirect('usuarios')
-
-
-# ── SEGUIMIENTOS ──────────────────────────────────────────────────────────
-@login_required
-def seguimientos_view(request):
-    hoy = date.today()
-    seguimientos = SeguimientoPaciente.objects.filter(
-        estado='pendiente'
-    ).select_related('paciente', 'servicio', 'cita_origen').order_by('fecha_objetivo')
-    context = {"hoy": hoy, "seguimientos": seguimientos}
-    return render(request, "core/seguimientos.html", context)
-
-
-@login_required
-def actualizar_seguimiento(request, seguimiento_id):
-    seguimiento = get_object_or_404(SeguimientoPaciente, id=seguimiento_id)
-    if request.method == 'POST':
-        nuevo_estado = request.POST.get('estado')
-        if nuevo_estado in ['contactado', 'agendado', 'descartado']:
-            seguimiento.estado = nuevo_estado
-            seguimiento.save()
-    return redirect('seguimientos')
-
-
-# Alias para compatibilidad con URL existente
-@login_required
-def marcar_seguimiento_contactado(request, seguimiento_id):
-    return actualizar_seguimiento(request, seguimiento_id)
+        messages.error(request, f'Error al crear

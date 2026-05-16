@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python manage.py check)",
+      "Bash(python -c \"from core import views; import inspect; funcs = [n for n,f in inspect.getmembers\\(views, inspect.isfunction\\) if not n.startswith\\('_'\\)]; print\\('\\\\n'.join\\(funcs\\)\\)\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(.venv\\\\Scripts\\\\python manage.py runserver 8000)",
+      "Bash(timeout 3)",
+      "Bash(python manage.py runserver 8000)"
+    ]
+  }
+}

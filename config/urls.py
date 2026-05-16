@@ -25,6 +25,11 @@ urlpatterns = [
     path('horarios/', views.horarios_view, name='horarios'),
     path('horarios/<int:profesional_id>/guardar/', views.guardar_horarios, name='guardar_horarios'),
 
+    # Profesionales
+    path('profesionales/', views.profesionales_view, name='profesionales'),
+    path('profesionales/<int:profesional_id>/editar/', views.editar_profesional, name='editar_profesional'),
+    path('profesionales/<int:profesional_id>/toggle/', views.toggle_profesional, name='toggle_profesional'),
+
     # Servicios
     path('servicios/', views.servicios_view, name='servicios'),
     path('servicios/crear/', views.crear_servicio, name='crear_servicio'),

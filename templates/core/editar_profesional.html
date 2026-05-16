@@ -1,0 +1,295 @@
+{% extends "core/base.html" %}
+
+{% block title %}Editar Profesional{% endblock %}
+{% block page_title %}{{ profesional.nombre_publico }}{% endblock %}
+{% block page_subtitle %}Editar datos, horarios y cuenta{% endblock %}
+
+{% block extra_head %}
+<style>
+  .form-section {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 20px;
+    margin-bottom: 18px;
+  }
+  .form-section-title {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .horarios-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  .horarios-table thead th {
+    text-align: left;
+    padding: 11px 16px;
+    font-size: 0.67rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 500;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .horarios-table tbody td {
+    padding: 13px 16px;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    vertical-align: middle;
+  }
+  .horarios-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .dia-nombre {
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .checkbox-label input[type="checkbox"] {
+    cursor: pointer;
+  }
+  .hora-input {
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    min-width: 70px;
+  }
+  .hora-input:disabled {
+    background: #f5f5f5;
+    color: var(--text-muted);
+    border-color: #eee;
+  }
+  .horario-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .descanso-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .usuario-info {
+    background: #f9f9f9;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    margin-top: 10px;
+  }
+  .usuario-info p {
+    margin: 0 0 6px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+  }
+  .usuario-info strong {
+    color: var(--text-primary);
+  }
+  .btn-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+  <form method="post" action="{% url 'editar_profesional' profesional.id %}">
+    {% csrf_token %}
+
+    <!-- Datos básicos -->
+    <div class="form-section">
+      <div class="form-section-title">Información básica</div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label for="id_nombres">Nombres</label>
+          <input type="text" id="id_nombres" name="nombres" value="{{ profesional.nombres }}" required>
+        </div>
+        <div class="form-group">
+          <label for="id_apellidos">Apellidos</label>
+          <input type="text" id="id_apellidos" name="apellidos" value="{{ profesional.apellidos }}">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="id_nombre_publico">Nombre público (cómo aparece en la agenda)</label>
+        <input type="text" id="id_nombre_publico" name="nombre_publico" value="{{ profesional.nombre_publico }}" placeholder="Ej: Dra. María González">
+      </div>
+
+      <div class="form-group">
+        <label for="id_telefono">Teléfono</label>
+        <input type="tel" id="id_telefono" name="telefono" value="{{ profesional.telefono }}" placeholder="+56912345678">
+      </div>
+
+      <div class="form-group">
+        <label>RUT</label>
+        <input type="text" value="{{ profesional.rut }}" disabled style="background:#f5f5f5;">
+      </div>
+    </div>
+
+    <!-- Horarios -->
+    <div class="form-section">
+      <div class="form-section-title">Horarios de atención</div>
+
+      <table class="horarios-table">
+        <thead>
+          <tr>
+            <th>Día</th>
+            <th>Activo</th>
+            <th colspan="2">Horario de atención</th>
+            <th>Pausa</th>
+            <th colspan="2">Horario de pausa</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in horarios %}
+          <tr>
+            <td class="dia-nombre">{{ item.dia_nombre }}</td>
+
+            <td>
+              <label class="checkbox-label">
+                <input type="checkbox" name="activo_{{ item.dia_num }}"
+                       {% if item.horario and item.horario.activo %}checked{% endif %}
+                       onchange="toggleDia({{ item.dia_num }})">
+              </label>
+            </td>
+
+            <td>
+              <input type="time" class="hora-input hora-inicio-{{ item.dia_num }}"
+                     name="hora_inicio_{{ item.dia_num }}"
+                     value="{% if item.horario and item.horario.hora_inicio %}{{ item.horario.hora_inicio|time:'H:i' }}{% endif %}"
+                     {% if not item.horario or not item.horario.activo %}disabled{% endif %}>
+            </td>
+
+            <td style="text-align: center; color: var(--text-muted); font-size: 0.8rem;">→</td>
+
+            <td>
+              <input type="time" class="hora-input hora-fin-{{ item.dia_num }}"
+                     name="hora_fin_{{ item.dia_num }}"
+                     value="{% if item.horario and item.horario.hora_fin %}{{ item.horario.hora_fin|time:'H:i' }}{% endif %}"
+                     {% if not item.horario or not item.horario.activo %}disabled{% endif %}>
+            </td>
+
+            <td>
+              <label class="checkbox-label">
+                <input type="checkbox" name="tiene_descanso_{{ item.dia_num }}"
+                       {% if item.horario and item.horario.tiene_descanso %}checked{% endif %}
+                       onchange="toggleDescanso({{ item.dia_num }})"
+                       {% if not item.horario or not item.horario.activo %}disabled{% endif %}>
+              </label>
+            </td>
+
+            <td>
+              <input type="time" class="hora-input des-inicio-{{ item.dia_num }}"
+                     name="inicio_descanso_{{ item.dia_num }}"
+                     style="display: {% if item.horario and item.horario.tiene_descanso %}inline{% else %}none{% endif %};"
+                     value="{% if item.horario and item.horario.inicio_descanso %}{{ item.horario.inicio_descanso|time:'H:i' }}{% endif %}"
+                     {% if not item.horario or not item.horario.tiene_descanso %}disabled{% endif %}>
+            </td>
+
+            <td style="text-align: center; color: var(--text-muted); font-size: 0.8rem; display: {% if item.horario and item.horario.tiene_descanso %}table-cell{% else %}none{% endif %};" id="arrow-{{ item.dia_num }}">→</td>
+
+            <td>
+              <input type="time" class="hora-input des-fin-{{ item.dia_num }}"
+                     name="fin_descanso_{{ item.dia_num }}"
+                     style="display: {% if item.horario and item.horario.tiene_descanso %}inline{% else %}none{% endif %};"
+                     value="{% if item.horario and item.horario.fin_descanso %}{{ item.horario.fin_descanso|time:'H:i' }}{% endif %}"
+                     {% if not item.horario or not item.horario.tiene_descanso %}disabled{% endif %}>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Usuario/Email -->
+    <div class="form-section">
+      <div class="form-section-title">Acceso a sistema</div>
+
+      <div class="form-group">
+        <label for="id_email">Email (para crear cuenta de usuario)</label>
+        <input type="email" id="id_email" name="email" placeholder="profesional@clinica.cl">
+      </div>
+
+      <div class="form-group">
+        <label for="id_password">Contraseña temporal <span style="color:var(--text-muted); font-weight:400;">(si es nueva cuenta)</span></label>
+        <input type="password" id="id_password" name="password" placeholder="temporal123" value="temporal123">
+      </div>
+
+      <div class="usuario-info">
+        <p><strong>Nota:</strong> Si proporciona un email, se creará automáticamente una cuenta de usuario con rol "Profesional". El usuario podrá cambiar la contraseña la primera vez que inicie sesión.</p>
+      </div>
+    </div>
+
+    <!-- Botones -->
+    <div class="btn-group">
+      <a href="{% url 'profesionales' %}" class="btn btn-ghost">Cancelar</a>
+      <button type="submit" class="btn btn-primary">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Guardar cambios
+      </button>
+    </div>
+  </form>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleDia(dia) {
+  const checkbox = document.querySelector(`input[name="activo_${dia}"]`);
+  const inicio = document.querySelector(`.hora-inicio-${dia}`);
+  const fin = document.querySelector(`.hora-fin-${dia}`);
+  const descansoCheck = document.querySelector(`input[name="tiene_descanso_${dia}"]`);
+
+  if (checkbox.checked) {
+    inicio.disabled = false;
+    fin.disabled = false;
+    descansoCheck.disabled = false;
+  } else {
+    inicio.disabled = true;
+    fin.disabled = true;
+    descansoCheck.disabled = true;
+    descansoCheck.checked = false;
+    toggleDescanso(dia);
+  }
+}
+
+function toggleDescanso(dia) {
+  const checkbox = document.querySelector(`input[name="tiene_descanso_${dia}"]`);
+  const inicioInput = document.querySelector(`.des-inicio-${dia}`);
+  const finInput = document.querySelector(`.des-fin-${dia}`);
+  const arrow = document.getElementById(`arrow-${dia}`);
+
+  if (checkbox.checked) {
+    inicioInput.style.display = 'inline';
+    finInput.style.display = 'inline';
+    arrow.style.display = 'table-cell';
+    inicioInput.disabled = false;
+    finInput.disabled = false;
+  } else {
+    inicioInput.style.display = 'none';
+    finInput.style.display = 'none';
+    arrow.style.display = 'none';
+    inicioInput.disabled = true;
+    finInput.disabled = true;
+  }
+}
+</script>
+{% endblock %}

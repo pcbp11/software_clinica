@@ -1,0 +1,168 @@
+{% extends "core/base.html" %}
+
+{% block title %}Profesionales{% endblock %}
+{% block page_title %}Profesionales{% endblock %}
+{% block page_subtitle %}Médicos y esteticistas de la clínica{% endblock %}
+
+{% block extra_head %}
+<style>
+  .badge-activo {
+    background: var(--accent-light);
+    color: var(--accent);
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 0.73rem;
+    font-weight: 500;
+  }
+  .badge-inactivo {
+    background: #f0f0f0;
+    color: var(--text-muted);
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 0.73rem;
+    font-weight: 500;
+  }
+  .prof-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent) 0%, #3d8468 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .prof-info { flex: 1; }
+  .prof-nombre { font-weight: 500; color: var(--text-primary); font-size: 0.88rem; }
+  .prof-rut { font-size: 0.75rem; color: var(--text-muted); margin-top: 1px; }
+  .prof-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    transition: background 0.12s;
+  }
+  .prof-row:hover {
+    background: #fafaf8;
+  }
+  .prof-row:last-child {
+    border-bottom: none;
+  }
+  .toggle-form {
+    display: inline;
+  }
+  .stats-mini {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat-mini {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+  }
+  .stat-mini-label {
+    font-size: 0.69rem;
+    font-weight: 500;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .stat-mini-value {
+    font-family: var(--font-display);
+    font-size: 1.6rem;
+    font-weight: 300;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+  <div class="stats-mini">
+    <div class="stat-mini">
+      <div class="stat-mini-label">Total</div>
+      <div class="stat-mini-value">{{ total }}</div>
+    </div>
+    <div class="stat-mini">
+      <div class="stat-mini-label">Activos</div>
+      <div class="stat-mini-value">{{ activos }}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Equipo de profesionales</span>
+    </div>
+    {% if profesionales %}
+      {% for p in profesionales %}
+      <div class="prof-row">
+        <div class="prof-avatar">
+          {{ p.nombres|slice:":1" }}{{ p.apellidos|slice:":1" }}
+        </div>
+        <div class="prof-info">
+          <div class="prof-nombre">{{ p.nombre_publico|default:p.nombres }}</div>
+          <div class="prof-rut">{{ p.rut }}</div>
+        </div>
+        <div style="font-size:0.82rem; color:var(--text-secondary); min-width:140px; text-align:right;">
+          {% if p.telefono %}
+          <div>{{ p.telefono }}</div>
+          {% endif %}
+          {% if p.sucursal_principal %}
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">{{ p.sucursal_principal.nombre }}</div>
+          {% endif %}
+        </div>
+        <div style="text-align:center; min-width:100px;">
+          {% if p.activo %}
+            <span class="badge-activo">Activo</span>
+          {% else %}
+            <span class="badge-inactivo">Inactivo</span>
+          {% endif %}
+        </div>
+        <div style="display:flex; gap:8px; flex-shrink:0;">
+          <a href="{% url 'editar_profesional' p.id %}" class="btn btn-ghost btn-sm" title="Editar profesional">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+            </svg>
+          </a>
+          <form method="post" action="{% url 'toggle_profesional' p.id %}" class="toggle-form">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-ghost btn-sm" title="{% if p.activo %}Desactivar{% else %}Activar{% endif %}">
+              {% if p.activo %}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="1"/>
+                <path d="M12 5v2m0 10v2M7.07 7.07l1.41 1.41m4.24 4.24l1.41 1.41M5 12H3m8 0h2M7.07 16.93l1.41-1.41m4.24-4.24l1.41-1.41"/>
+              </svg>
+              {% else %}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 12a11.05 11.05 0 0 0-22 0zm0 0a11.063 11.063 0 0 1-4.06 8.576M1 12a11.05 11.05 0 0 1 4.06-8.576"/>
+              </svg>
+              {% endif %}
+            </button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div style="padding:56px 24px; text-align:center;">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:0.18; margin:0 auto 14px;">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        <p style="font-size:0.875rem; color:var(--text-muted);">No hay profesionales registrados</p>
+        <p style="margin-top:4px; font-size:0.78rem; color:var(--text-muted);">Agrega profesionales desde el panel de Administración</p>
+      </div>
+    {% endif %}
+  </div>
+
+{% endblock %}
