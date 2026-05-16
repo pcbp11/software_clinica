@@ -548,6 +548,13 @@
           </svg>
           Profesionales
         </a>
+        <a href="{% url 'descuentos_pendientes' %}" class="nav-item {% if request.resolver_match.url_name == 'descuentos_pendientes' %}active{% endif %}">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="2" y="5" width="20" height="14" rx="2" ry="2"/>
+            <path d="M2 10h20"/>
+          </svg>
+          Descuentos
+        </a>
       </div>
 
       <div class="nav-group">

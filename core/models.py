@@ -444,3 +444,35 @@ class SeguimientoPaciente(models.Model):
 
     def __str__(self):
         return f"{self.paciente} - {self.servicio} - {self.fecha_objetivo}"
+
+
+class Descuento(models.Model):
+    TIPOS = [
+        ('porcentaje', 'Porcentaje (%)'),
+        ('valor_fijo', 'Valor fijo ($)'),
+    ]
+
+    ESTADOS = [
+        ('pendiente', 'Pendiente de autorización'),
+        ('aprobado', 'Aprobado'),
+        ('rechazado', 'Rechazado'),
+    ]
+
+    cita = models.ForeignKey(Cita, on_delete=models.CASCADE, related_name='descuentos')
+    tipo = models.CharField(max_length=20, choices=TIPOS)
+    valor = models.PositiveIntegerField(help_text="Si es %, ingresar 10 para 10%. Si es $, ingresar la cantidad.")
+    monto_descuento = models.PositiveIntegerField(help_text="Monto final a descontar en pesos")
+    razon = models.TextField(blank=True, help_text="Ej: Autorizado por Natalia Carro")
+    estado = models.CharField(max_length=20, choices=ESTADOS, default='pendiente')
+    solicitado_por = models.CharField(max_length=100, blank=True)  # Nombre de quien solicitó
+    autorizado_por = models.CharField(max_length=100, blank=True)  # Nombre de quien autorizó
+    fecha_solicitud = models.DateTimeField(auto_now_add=True)
+    fecha_autorizacion = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Descuento"
+        verbose_name_plural = "Descuentos"
+        ordering = ['-fecha_solicitud']
+
+    def __str__(self):
+        return f"Descuento {self.get_tipo_display()} - {self.cita} - {self.get_estado_display()}"

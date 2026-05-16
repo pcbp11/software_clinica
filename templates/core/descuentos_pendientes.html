@@ -1,0 +1,268 @@
+{% extends "core/base.html" %}
+
+{% block title %}Descuentos Pendientes{% endblock %}
+{% block page_title %}Descuentos{% endblock %}
+{% block page_subtitle %}Solicitudes de descuento pendientes de autorización{% endblock %}
+
+{% block extra_head %}
+<style>
+  .desc-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+
+  .desc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin-bottom: 12px;
+    gap: 12px;
+  }
+
+  .desc-paciente {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+  }
+
+  .desc-fecha {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .desc-badge {
+    background: #fff3cd;
+    color: #856404;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .desc-info {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 12px;
+    background: var(--bg-main);
+    border-radius: 8px;
+  }
+
+  .desc-info-item {
+    font-size: 0.82rem;
+  }
+
+  .desc-info-label {
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-bottom: 3px;
+  }
+
+  .desc-info-value {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  .desc-razon {
+    padding: 10px;
+    background: var(--bg-main);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    font-size: 0.82rem;
+    margin-bottom: 12px;
+    color: var(--text-secondary);
+  }
+
+  .desc-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 56px 24px;
+  }
+
+  .empty-icon {
+    font-size: 3rem;
+    opacity: 0.2;
+    margin-bottom: 12px;
+  }
+
+  .empty-text {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
+  <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px;">
+    <div style="font-size: 0.69rem; font-weight: 500; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px;">Pendientes</div>
+    <div style="font-family: var(--font-display); font-size: 1.8rem; font-weight: 300; color: #ffc107;">{{ descuentos|length }}</div>
+  </div>
+  <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px;">
+    <div style="font-size: 0.69rem; font-weight: 500; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px;">Monto Total</div>
+    <div style="font-family: var(--font-display); font-size: 1.6rem; font-weight: 300; color: var(--text-primary);">
+      ${% widthratio descuentos|dictsort:"monto_descuento"|sum 1 1 %}
+    </div>
+  </div>
+</div>
+
+{% if descuentos %}
+  {% for desc in descuentos %}
+  <div class="desc-card">
+    <!-- Header -->
+    <div class="desc-header">
+      <div>
+        <div class="desc-paciente">{{ desc.cita.paciente.nombres }} {{ desc.cita.paciente.apellidos }}</div>
+        <div class="desc-fecha">{{ desc.fecha_solicitud|date:"d/m/Y H:i" }}</div>
+      </div>
+      <div class="desc-badge">⏳ Pendiente</div>
+    </div>
+
+    <!-- Info -->
+    <div class="desc-info">
+      <div class="desc-info-item">
+        <div class="desc-info-label">Servicio</div>
+        <div class="desc-info-value">{{ desc.cita.servicio.nombre }}</div>
+      </div>
+      <div class="desc-info-item">
+        <div class="desc-info-label">Cita</div>
+        <div class="desc-info-value">{{ desc.cita.fecha|date:"d/m/Y" }} {{ desc.cita.hora_inicio|time:"H:i" }}</div>
+      </div>
+      <div class="desc-info-item">
+        <div class="desc-info-label">Tipo de Descuento</div>
+        <div class="desc-info-value">{{ desc.get_tipo_display }}</div>
+      </div>
+      <div class="desc-info-item">
+        <div class="desc-info-label">Valor / Monto</div>
+        <div class="desc-info-value">
+          {% if desc.tipo == 'porcentaje' %}
+            {{ desc.valor }}% → ${{ desc.monto_descuento|stringformat:",d" }}
+          {% else %}
+            ${{ desc.monto_descuento|stringformat:",d" }}
+          {% endif %}
+        </div>
+      </div>
+      <div class="desc-info-item">
+        <div class="desc-info-label">Monto Original</div>
+        <div class="desc-info-value">${{ desc.cita.monto_total|stringformat:",d" }}</div>
+      </div>
+      <div class="desc-info-item">
+        <div class="desc-info-label">Nuevo Monto</div>
+        <div class="desc-info-value" style="color: var(--accent); font-weight: 700;">${{ desc.cita.monto_total|add:desc.monto_descuento|stringformat:",d" }}</div>
+      </div>
+    </div>
+
+    <!-- Razón -->
+    {% if desc.razon %}
+    <div class="desc-razon">
+      <strong>Razón:</strong> {{ desc.razon }}
+    </div>
+    {% endif %}
+
+    <!-- Solicitado por -->
+    <div style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 12px;">
+      Solicitado por: <strong>{{ desc.solicitado_por }}</strong>
+    </div>
+
+    <!-- Acciones -->
+    <div class="desc-actions">
+      <button type="button" onclick="rechazarDescuento({{ desc.id }})" class="btn btn-ghost" style="font-size: 0.78rem;">
+        ✕ Rechazar
+      </button>
+      <button type="button" onclick="aprobarDescuento({{ desc.id }})" class="btn btn-primary" style="font-size: 0.78rem;">
+        ✓ Aprobar
+      </button>
+    </div>
+  </div>
+  {% endfor %}
+
+{% else %}
+  <div class="card">
+    <div class="empty-state">
+      <div class="empty-icon">✓</div>
+      <p class="empty-text">No hay descuentos pendientes de autorización</p>
+      <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">Todos los descuentos han sido procesados</p>
+    </div>
+  </div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function getCsrf() {
+    const name = 'csrftoken';
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
+  async function aprobarDescuento(descuentoId) {
+    if (!confirm('¿Aprobar este descuento?')) return;
+
+    const form = new FormData();
+    form.append('accion', 'aprobar');
+
+    try {
+      const resp = await fetch(`/descuentos/${descuentoId}/autorizar/`, {
+        method: 'POST',
+        body: form,
+        headers: { 'X-CSRFToken': getCsrf() }
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        alert('✓ Descuento aprobado');
+        location.reload();
+      } else {
+        alert('Error: ' + (data.error || 'No se pudo procesar'));
+      }
+    } catch (e) {
+      alert('Error de conexión');
+    }
+  }
+
+  async function rechazarDescuento(descuentoId) {
+    if (!confirm('¿Rechazar este descuento?')) return;
+
+    const form = new FormData();
+    form.append('accion', 'rechazar');
+
+    try {
+      const resp = await fetch(`/descuentos/${descuentoId}/autorizar/`, {
+        method: 'POST',
+        body: form,
+        headers: { 'X-CSRFToken': getCsrf() }
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        alert('✗ Descuento rechazado');
+        location.reload();
+      } else {
+        alert('Error: ' + (data.error || 'No se pudo procesar'));
+      }
+    } catch (e) {
+      alert('Error de conexión');
+    }
+  }
+</script>
+{% endblock %}

@@ -747,6 +747,52 @@
               <input type="text" id="md-pago-obs" placeholder="Ej: 50% anticipo" style="font-size:0.85rem;">
             </div>
 
+            <!-- Sección de Descuentos -->
+            <div style="margin-top:16px; padding-top:16px; border-top:1px solid var(--border);">
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.82rem; font-weight:500; color:var(--text-primary);">
+                <input type="checkbox" id="md-desc-check" onchange="toggleDescuento()">
+                Aplicar descuento
+              </label>
+
+              <div id="md-desc-fields" style="display:none; margin-top:12px; padding:12px; background:var(--bg-main); border-radius:8px;">
+
+                <!-- Tipo de descuento -->
+                <div style="margin-bottom:10px;">
+                  <label style="font-size:0.77rem; font-weight:500; color:var(--text-secondary); margin-bottom:5px;">Tipo de descuento</label>
+                  <div style="display:flex; gap:8px;">
+                    <label style="flex:1; display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.8rem;">
+                      <input type="radio" name="md-desc-tipo" value="porcentaje" checked onchange="actualizarDescuento()">
+                      <span>Porcentaje (%)</span>
+                    </label>
+                    <label style="flex:1; display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.8rem;">
+                      <input type="radio" name="md-desc-tipo" value="valor_fijo" onchange="actualizarDescuento()">
+                      <span>Valor fijo ($)</span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Valor -->
+                <div style="margin-bottom:10px;">
+                  <label style="font-size:0.77rem; font-weight:500; color:var(--text-secondary); margin-bottom:5px;">
+                    <span id="md-desc-label-valor">Porcentaje</span>
+                  </label>
+                  <input type="number" id="md-desc-valor" placeholder="Ej: 10" min="0" oninput="actualizarDescuento()" style="font-size:0.85rem;">
+                </div>
+
+                <!-- Razón -->
+                <div style="margin-bottom:10px;">
+                  <label style="font-size:0.77rem; font-weight:500; color:var(--text-secondary); margin-bottom:5px;">Razón <span style="font-weight:400; color:var(--text-muted);">(autorizado por...)</span></label>
+                  <input type="text" id="md-desc-razon" placeholder="Ej: Autorizado por Natalia Carro" style="font-size:0.85rem;">
+                </div>
+
+                <!-- Preview del descuento -->
+                <div style="padding:10px; background:var(--accent-light); border-radius:6px; font-size:0.8rem; color:var(--accent);">
+                  <strong>Descuento:</strong> <span id="md-desc-preview">$0</span><br>
+                  <strong>Nuevo total:</strong> <span id="md-desc-nuevo-total">$0</span>
+                </div>
+              </div>
+            </div>
+
             <div id="md-pago-error" class="md-error" style="display:none;"></div>
             <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
               <button type="button" onclick="togglePagoForm()" class="btn btn-ghost" style="font-size:0.78rem;">Cancelar</button>
@@ -1105,6 +1151,51 @@
     setTimeout(() => document.getElementById('md-pago-monto').focus(), 50);
   }
 
+  /* ─── Funciones de Descuento ───────────────────────────────── */
+  function toggleDescuento() {
+    const check = document.getElementById('md-desc-check').checked;
+    document.getElementById('md-desc-fields').style.display = check ? '' : 'none';
+    if (!check) {
+      document.getElementById('md-desc-valor').value = '';
+      document.getElementById('md-desc-razon').value = '';
+    }
+    actualizarDescuento();
+  }
+
+  function actualizarDescuento() {
+    if (!_cita) return;
+    const tipoRadios = document.getElementsByName('md-desc-tipo');
+    const tipo = Array.from(tipoRadios).find(r => r.checked)?.value || 'porcentaje';
+    const valor = parseInt(document.getElementById('md-desc-valor').value || '0');
+    const montoTotal = _cita.monto_total || 0;
+
+    // Actualizar etiqueta
+    document.getElementById('md-desc-label-valor').textContent = tipo === 'porcentaje' ? 'Porcentaje (%)' : 'Monto ($)';
+
+    // Calcular descuento
+    let descuento = 0;
+    if (tipo === 'porcentaje') {
+      descuento = Math.floor(montoTotal * (valor / 100));
+    } else {
+      descuento = valor;
+    }
+
+    const nuevoTotal = Math.max(montoTotal - descuento, 0);
+
+    // Mostrar preview
+    document.getElementById('md-desc-preview').textContent = `$${descuento.toLocaleString('es-CL')}`;
+    document.getElementById('md-desc-nuevo-total').textContent = `$${nuevoTotal.toLocaleString('es-CL')}`;
+
+    // Guardar en variable global para usar en registrarPago
+    window._descuentoActual = {
+      aplicado: document.getElementById('md-desc-check').checked,
+      tipo: tipo,
+      valor: valor,
+      monto: descuento,
+      razon: document.getElementById('md-desc-razon').value.trim()
+    };
+  }
+
   async function registrarPago() {
     if (!_cita) return;
     const montoRaw = document.getElementById('md-pago-monto').value.replace(/\D/g, '');
@@ -1135,6 +1226,15 @@
     form.append('voucher', voucher);
     form.append('boleta', boleta);
     form.append('observacion', obs);
+
+    // Agregar datos de descuento si aplica
+    if (window._descuentoActual && window._descuentoActual.aplicado) {
+      form.append('desc_aplicado', '1');
+      form.append('desc_tipo', window._descuentoActual.tipo);
+      form.append('desc_valor', window._descuentoActual.valor);
+      form.append('desc_monto', window._descuentoActual.monto);
+      form.append('desc_razon', window._descuentoActual.razon);
+    }
 
     try {
       const resp = await fetch(`/citas/${_cita.id}/pago/`, {

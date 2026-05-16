@@ -13,6 +13,7 @@ from .models import (
     Cita,
     Pago,
     SeguimientoPaciente,
+    Descuento,
 )
 from .utils import obtener_horas_disponibles
 
@@ -369,3 +370,24 @@ class SeguimientoPacienteAdmin(admin.ModelAdmin):
         'servicio__nombre',
     )
     readonly_fields = ('creado_en', 'actualizado_en')
+
+
+@admin.register(Descuento)
+class DescuentoAdmin(admin.ModelAdmin):
+    list_display = (
+        'cita',
+        'tipo',
+        'valor',
+        'monto_descuento',
+        'estado',
+        'solicitado_por',
+        'fecha_solicitud',
+    )
+    list_filter = ('estado', 'tipo', 'fecha_solicitud')
+    search_fields = (
+        'cita__paciente__nombres',
+        'cita__paciente__apellidos',
+        'solicitado_por',
+        'razon',
+    )
+    readonly_fields = ('fecha_solicitud', 'fecha_autorizacion', 'solicitado_por')

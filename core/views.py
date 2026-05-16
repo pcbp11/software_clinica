@@ -5,6 +5,8 @@ from django.contrib.auth.models import User, Group
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.http import JsonResponse
+from django.core.mail import send_mail
+from django.conf import settings
 
 from .models import (
     Empresa,
@@ -18,6 +20,7 @@ from .models import (
     Pago,
     Paciente,
     Sucursal,
+    Descuento,
 )
 from .utils import obtener_agenda_completa
 
@@ -304,6 +307,71 @@ def registrar_pago_cita(request, cita_id):
             observacion=observacion
         )
         cita.refresh_from_db()
+
+        # Manejar descuento si aplica
+        desc_aplicado = request.POST.get('desc_aplicado', '').strip()
+        descuento_obj = None
+        msg_descuento = None
+
+        if desc_aplicado == '1':
+            desc_tipo = request.POST.get('desc_tipo', 'porcentaje')
+            desc_valor = int(request.POST.get('desc_valor', '0'))
+            desc_monto = int(request.POST.get('desc_monto', '0'))
+            desc_razon = request.POST.get('desc_razon', '').strip()
+
+            if desc_monto > 0:
+                descuento_obj = Descuento.objects.create(
+                    cita=cita,
+                    tipo=desc_tipo,
+                    valor=desc_valor,
+                    monto_descuento=desc_monto,
+                    razon=desc_razon,
+                    solicitado_por=request.user.get_full_name() or request.user.username,
+                    estado='pendiente'
+                )
+
+                # Enviar notificación a Natalia (dueña)
+                try:
+                    empresa = cita.sucursal.empresa if cita.sucursal else None
+                    email_admin = empresa.email if empresa and empresa.email else settings.DEFAULT_FROM_EMAIL
+
+                    asunto = f"⚠️ Solicitud de Descuento - {cita.paciente.nombres} {cita.paciente.apellidos}"
+                    mensaje = f"""
+Hola,
+
+Se ha solicitado un descuento para una cita:
+
+📋 Paciente: {cita.paciente.nombres} {cita.paciente.apellidos}
+📅 Fecha: {cita.fecha.strftime('%d/%m/%Y')} {cita.hora_inicio.strftime('%H:%M')}
+💼 Servicio: {cita.servicio.nombre}
+💰 Monto Total: ${cita.monto_total:,}
+
+Descuento Solicitado:
+- Tipo: {dict(Descuento.TIPOS).get(desc_tipo, desc_tipo)}
+- Valor: {desc_valor}
+- Monto a Descontar: ${desc_monto:,}
+- Razón: {desc_razon or 'No especificada'}
+- Solicitado por: {descuento_obj.solicitado_por}
+
+Nuevo Monto Total: ${cita.monto_total - desc_monto:,}
+
+Por favor, revisa y aprueba o rechaza este descuento en el sistema.
+
+Saludos,
+Sistema de Gestión Clínica
+"""
+                    send_mail(
+                        asunto,
+                        mensaje,
+                        settings.DEFAULT_FROM_EMAIL,
+                        [email_admin],
+                        fail_silently=True
+                    )
+                except Exception as e:
+                    print(f"Error al enviar email: {e}")
+
+                msg_descuento = "Descuento registrado. Pendiente de autorización."
+
         return JsonResponse({
             'ok': True,
             'pago_id': pago.id,
@@ -316,6 +384,8 @@ def registrar_pago_cita(request, cita_id):
             'saldo_pendiente_fmt': f"${cita.saldo_pendiente:,}".replace(',', '.'),
             'estado_pago': cita.estado_pago,
             'estado_pago_display': cita.get_estado_pago_display(),
+            'descuento_msg': msg_descuento,
+            'descuento_id': descuento_obj.id if descuento_obj else None,
         })
     except (ValueError, TypeError) as e:
         return JsonResponse({'error': f'Monto inválido: {e}'}, status=400)
@@ -356,6 +426,76 @@ def reagendar_cita(request, cita_id):
         })
     except ValidationError as e:
         return JsonResponse({'error': ' '.join(e.messages)}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+# ── DESCUENTOS ────────────────────────────────────────────────────────────
+@login_required
+def descuentos_pendientes_view(request):
+    """Vista para gestionar descuentos pendientes de autorización"""
+    descuentos = Descuento.objects.select_related('cita__paciente', 'cita__servicio').filter(
+        estado='pendiente'
+    ).order_by('-fecha_solicitud')
+
+    context = {
+        'descuentos': descuentos,
+        'total_pendientes': descuentos.count(),
+    }
+    return render(request, 'core/descuentos_pendientes.html', context)
+
+
+@login_required
+def autorizar_descuento(request, descuento_id):
+    """Autorizar un descuento pendiente"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método no permitido'}, status=405)
+
+    descuento = get_object_or_404(Descuento, id=descuento_id)
+    if descuento.estado != 'pendiente':
+        return JsonResponse({'error': 'Este descuento ya fue procesado'}, status=400)
+
+    try:
+        accion = request.POST.get('accion', 'aprobar')  # aprobar o rechazar
+
+        if accion == 'aprobar':
+            descuento.estado = 'aprobado'
+            # Aquí podrías aplicar el descuento al monto_total de la cita si necesitas
+            estado_msg = 'Descuento aprobado'
+        else:
+            descuento.estado = 'rechazado'
+            estado_msg = 'Descuento rechazado'
+
+        descuento.autorizado_por = request.user.get_full_name() or request.user.username
+        descuento.fecha_autorizacion = datetime.now()
+        descuento.save()
+
+        # Enviar notificación al que solicitó
+        try:
+            asunto = f"Descuento {estado_msg.lower()} - {descuento.cita.paciente.nombres}"
+            mensaje = f"""
+Hola,
+
+El descuento que solicitaste ha sido {estado_msg.lower()}:
+
+📋 Paciente: {descuento.cita.paciente.nombres} {descuento.cita.paciente.apellidos}
+💰 Monto: ${descuento.monto_descuento:,}
+✅ Autorizado por: {descuento.autorizado_por}
+
+Saludos,
+Sistema de Gestión Clínica
+"""
+            send_mail(
+                asunto,
+                mensaje,
+                settings.DEFAULT_FROM_EMAIL,
+                [request.user.email] if request.user.email else [],
+                fail_silently=True
+            )
+        except Exception as e:
+            print(f"Error al enviar email de notificación: {e}")
+
+        return JsonResponse({'ok': True, 'estado': descuento.get_estado_display()})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
 
@@ -552,4 +692,109 @@ def crear_servicio(request):
             servicio.profesionales.set(Profesional.objects.filter(id__in=prof_ids))
         messages.success(request, f'Servicio "{servicio.nombre}" creado.')
     except Exception as e:
-        messages.error(request, f'Error al crear
+        messages.error(request, f'Error al crear el servicio: {e}')
+    return redirect('servicios')
+
+
+@login_required
+def toggle_servicio(request, servicio_id):
+    if request.method != 'POST':
+        return redirect('servicios')
+    s = get_object_or_404(Servicio, id=servicio_id)
+    s.activo = not s.activo
+    s.save()
+    estado = 'activado' if s.activo else 'desactivado'
+    messages.success(request, f'Servicio "{s.nombre}" {estado}.')
+    return redirect('servicios')
+
+
+# ── USUARIOS ──────────────────────────────────────────────────────────────
+@login_required
+def usuarios_view(request):
+    if not request.user.is_staff:
+        messages.error(request, 'Solo administradores pueden gestionar usuarios.')
+        return redirect('dashboard')
+    for nombre in ['Admin', 'Recepcionista', 'Profesional']:
+        Group.objects.get_or_create(name=nombre)
+    context = {
+        'usuarios': User.objects.prefetch_related('groups').order_by('first_name', 'last_name'),
+        'grupos': Group.objects.all().order_by('name'),
+    }
+    return render(request, 'core/usuarios.html', context)
+
+
+@login_required
+def crear_usuario(request):
+    if not request.user.is_staff:
+        return redirect('dashboard')
+    if request.method != 'POST':
+        return redirect('usuarios')
+    try:
+        username = request.POST.get('username', '').strip()
+        if User.objects.filter(username=username).exists():
+            messages.error(request, f'El usuario "{username}" ya existe.')
+            return redirect('usuarios')
+        user = User.objects.create_user(
+            username=username,
+            first_name=request.POST.get('first_name', '').strip(),
+            last_name=request.POST.get('last_name', '').strip(),
+            email=request.POST.get('email', '').strip(),
+            password=request.POST.get('password', ''),
+        )
+        if request.POST.get('is_staff') == 'on':
+            user.is_staff = True
+            user.save()
+        grupo_id = request.POST.get('grupo')
+        if grupo_id:
+            grupo = Group.objects.filter(id=grupo_id).first()
+            if grupo:
+                user.groups.add(grupo)
+        messages.success(request, f'Usuario "{username}" creado.')
+    except Exception as e:
+        messages.error(request, f'Error al crear usuario: {e}')
+    return redirect('usuarios')
+
+
+@login_required
+def toggle_usuario(request, user_id):
+    if not request.user.is_staff:
+        return redirect('dashboard')
+    if request.method != 'POST':
+        return redirect('usuarios')
+    user = get_object_or_404(User, id=user_id)
+    if user == request.user:
+        messages.error(request, 'No puedes desactivar tu propio usuario.')
+        return redirect('usuarios')
+    user.is_active = not user.is_active
+    user.save()
+    estado = 'activado' if user.is_active else 'desactivado'
+    messages.success(request, f'Usuario "{user.username}" {estado}.')
+    return redirect('usuarios')
+
+
+# ── SEGUIMIENTOS ──────────────────────────────────────────────────────────
+@login_required
+def seguimientos_view(request):
+    hoy = date.today()
+    seguimientos = SeguimientoPaciente.objects.filter(
+        estado='pendiente'
+    ).select_related('paciente', 'servicio', 'cita_origen').order_by('fecha_objetivo')
+    context = {"hoy": hoy, "seguimientos": seguimientos}
+    return render(request, "core/seguimientos.html", context)
+
+
+@login_required
+def actualizar_seguimiento(request, seguimiento_id):
+    seguimiento = get_object_or_404(SeguimientoPaciente, id=seguimiento_id)
+    if request.method == 'POST':
+        nuevo_estado = request.POST.get('estado')
+        if nuevo_estado in ['contactado', 'agendado', 'descartado']:
+            seguimiento.estado = nuevo_estado
+            seguimiento.save()
+    return redirect('seguimientos')
+
+
+# Alias para compatibilidad con URL existente
+@login_required
+def marcar_seguimiento_contactado(request, seguimiento_id):
+    return actualizar_seguimiento(request, seguimiento_id)

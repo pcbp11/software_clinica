@@ -44,4 +44,8 @@ urlpatterns = [
     path('seguimientos/', views.seguimientos_view, name='seguimientos'),
     path('seguimientos/<int:seguimiento_id>/estado/', views.actualizar_seguimiento, name='actualizar_seguimiento'),
     path('seguimientos/<int:seguimiento_id>/contactado/', views.marcar_seguimiento_contactado, name='marcar_seguimiento_contactado'),
+
+    # Descuentos
+    path('descuentos/pendientes/', views.descuentos_pendientes_view, name='descuentos_pendientes'),
+    path('descuentos/<int:descuento_id>/autorizar/', views.autorizar_descuento, name='autorizar_descuento'),
 ]
