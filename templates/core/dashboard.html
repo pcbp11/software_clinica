@@ -1,0 +1,240 @@
+{% extends "core/base.html" %}
+{% load clinica_tags %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Buen día, {{ request.user.first_name|default:"equipo" }}{% endblock %}
+{% block page_subtitle %}{{ hoy|date:"l j \d\e F, Y" }}{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'agenda' %}" class="btn btn-primary">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+    Nueva cita
+  </a>
+{% endblock %}
+
+{% block content %}
+
+  <!-- Stats -->
+  <div class="stats-grid">
+
+    <div class="stat-card">
+      <div class="stat-top">
+        <div class="stat-label">Citas hoy</div>
+        <div class="stat-icon si-blue">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="3" y="4" width="18" height="18" rx="2"/>
+            <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+        </div>
+      </div>
+      <div class="stat-value">{{ citas_hoy }}</div>
+      <div class="stat-meta"><span class="stat-accent">{{ citas_confirmadas }}</span> confirmadas</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-top">
+        <div class="stat-label">En espera ahora</div>
+        <div class="stat-icon si-amber">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+        </div>
+      </div>
+      <div class="stat-value">{{ en_espera }}</div>
+      <div class="stat-meta">En sala de espera</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-top">
+        <div class="stat-label">Recaudado hoy</div>
+        <div class="stat-icon si-green">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <line x1="12" y1="1" x2="12" y2="23"/>
+            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+          </svg>
+        </div>
+      </div>
+      <div class="stat-value" style="font-size:1.75rem;">{{ recaudado_hoy|pesos }}</div>
+      <div class="stat-meta">{{ pagos_hoy }} pago{{ pagos_hoy|pluralize:"s" }} registrado{{ pagos_hoy|pluralize:"s" }}</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-top">
+        <div class="stat-label">Seguimientos pendientes</div>
+        <div class="stat-icon si-rose">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+        </div>
+      </div>
+      <div class="stat-value">{{ seguimientos_pendientes }}</div>
+      <div class="stat-meta">
+        {% if seguimientos_vencidos %}
+          <span class="stat-red">{{ seguimientos_vencidos }} vencido{{ seguimientos_vencidos|pluralize:"s" }}</span>
+        {% else %}
+          <span class="stat-accent">Al día</span>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Grid principal -->
+  <div style="display:grid; grid-template-columns: 1fr 310px; gap:18px; align-items:start;">
+
+    <!-- Citas del día -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Citas de hoy</span>
+        <a href="{% url 'agenda' %}" class="btn btn-ghost btn-sm">Ver agenda completa</a>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Hora</th>
+              <th>Paciente</th>
+              <th>Profesional</th>
+              <th>Servicio</th>
+              <th>Estado</th>
+              <th>Pago</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for cita in citas_del_dia %}
+            <tr>
+              <td style="font-weight:500; white-space:nowrap; font-variant-numeric:tabular-nums;">
+                {{ cita.hora_inicio|time:"H:i" }}
+                {% if cita.hora_fin %}
+                <span style="color:var(--text-muted); font-size:0.75rem; font-weight:400;">
+                  — {{ cita.hora_fin|time:"H:i" }}
+                </span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="pac-info">
+                  <div class="pac-avatar">
+                    {{ cita.paciente.nombres|slice:":1" }}{{ cita.paciente.apellidos|slice:":1" }}
+                  </div>
+                  <div>
+                    <div class="pac-nombre">{{ cita.paciente.nombres }} {{ cita.paciente.apellidos }}</div>
+                    <div class="pac-rut">{{ cita.paciente.rut }}</div>
+                  </div>
+                </div>
+              </td>
+              <td style="color:var(--text-secondary); font-size:0.83rem;">{{ cita.profesional }}</td>
+              <td style="color:var(--text-secondary); font-size:0.83rem;">{{ cita.servicio.nombre }}</td>
+              <td><span class="badge badge-{{ cita.estado }}">{{ cita.get_estado_display }}</span></td>
+              <td><span class="badge badge-{{ cita.estado_pago }}">{{ cita.get_estado_pago_display }}</span></td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+                    <rect x="3" y="4" width="18" height="18" rx="2"/>
+                    <line x1="16" y1="2" x2="16" y2="6"/>
+                    <line x1="8" y1="2" x2="8" y2="6"/>
+                    <line x1="3" y1="10" x2="21" y2="10"/>
+                  </svg>
+                  <p>No hay citas registradas para hoy</p>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Panel lateral -->
+    <div style="display:flex; flex-direction:column; gap:14px;">
+
+      <!-- Seguimientos próximos -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Seguimientos</span>
+          <a href="{% url 'seguimientos' %}" style="font-size:0.75rem; color:var(--accent); text-decoration:none; font-weight:500;">
+            Ver todos →
+          </a>
+        </div>
+        <div style="padding:8px 0;">
+          {% for seg in seguimientos_proximos %}
+          <div style="display:flex; align-items:center; gap:10px; padding:10px 20px; border-bottom:1px solid var(--border);">
+            <div class="pac-avatar" style="width:30px; height:30px; font-size:0.68rem;">
+              {{ seg.paciente.nombres|slice:":1" }}{{ seg.paciente.apellidos|slice:":1" }}
+            </div>
+            <div style="flex:1; min-width:0;">
+              <div style="font-size:0.82rem; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                {{ seg.paciente.nombres }} {{ seg.paciente.apellidos }}
+              </div>
+              <div style="font-size:0.72rem; color:var(--text-muted);">{{ seg.servicio.nombre }}</div>
+            </div>
+            <div style="font-size:0.72rem; white-space:nowrap; font-weight:500;
+              {% if seg.fecha_objetivo < hoy %}color:#c4446a;{% else %}color:var(--text-muted);{% endif %}">
+              {{ seg.fecha_objetivo|date:"d/m" }}
+            </div>
+          </div>
+          {% empty %}
+          <div class="empty-state" style="padding:28px 24px;">
+            <p>Sin seguimientos próximos</p>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Acciones rápidas -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Acciones rápidas</span>
+        </div>
+        <div style="padding:14px 16px; display:flex; flex-direction:column; gap:8px;">
+          <a href="{% url 'agenda' %}" class="btn btn-ghost" style="justify-content:flex-start;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="3" y="4" width="18" height="18" rx="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            Ir a la agenda
+          </a>
+          <a href="{% url 'seguimientos' %}" class="btn btn-ghost" style="justify-content:flex-start;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+            Ver seguimientos
+          </a>
+          <a href="/admin/core/cita/add/" class="btn btn-ghost" style="justify-content:flex-start;" target="_blank">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Registrar cita
+          </a>
+          <a href="/admin/core/paciente/add/" class="btn btn-ghost" style="justify-content:flex-start;" target="_blank">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <line x1="19" y1="8" x2="19" y2="14"/>
+              <line x1="22" y1="11" x2="16" y2="11"/>
+            </svg>
+            Nuevo paciente
+          </a>
+          <a href="/admin/" class="btn btn-ghost" style="justify-content:flex-start;" target="_blank">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            Panel admin
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+{% endblock %}

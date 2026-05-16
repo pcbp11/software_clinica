@@ -1,0 +1,168 @@
+{% extends "core/base.html" %}
+
+{% block title %}Seguimientos{% endblock %}
+{% block page_title %}Seguimientos{% endblock %}
+{% block page_subtitle %}Pacientes pendientes de contacto{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'agenda' %}" class="btn btn-primary">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+      <rect x="3" y="4" width="18" height="18" rx="2"/>
+      <line x1="16" y1="2" x2="16" y2="6"/>
+      <line x1="8" y1="2" x2="8" y2="6"/>
+      <line x1="3" y1="10" x2="21" y2="10"/>
+    </svg>
+    Ir a agenda
+  </a>
+{% endblock %}
+
+{% block content %}
+
+  <!-- Resumen rápido -->
+  {% if seguimientos %}
+  <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 22px;">
+    <div class="stat-card">
+      <div class="stat-top">
+        <div class="stat-label">Total pendientes</div>
+        <div class="stat-icon si-blue">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+        </div>
+      </div>
+      <div class="stat-value">{{ seguimientos|length }}</div>
+      <div class="stat-meta">Para contactar</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-top">
+        <div class="stat-label">Vencidos</div>
+        <div class="stat-icon si-rose">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+      </div>
+      <div class="stat-value">{{ global_seguimientos_vencidos }}</div>
+      <div class="stat-meta">Fecha ya pasó</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-top">
+        <div class="stat-label">Fecha actual</div>
+        <div class="stat-icon si-green">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="3" y="4" width="18" height="18" rx="2"/>
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+        </div>
+      </div>
+      <div class="stat-value" style="font-size:1.4rem;">{{ hoy|date:"d/m" }}</div>
+      <div class="stat-meta">{{ hoy|date:"l" }}</div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Tabla de seguimientos -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Seguimientos pendientes</span>
+      {% if seguimientos %}
+      <span style="font-size:0.78rem; color:var(--text-muted);">
+        {{ seguimientos|length }} paciente{{ seguimientos|length|pluralize:"s" }}
+      </span>
+      {% endif %}
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha objetivo</th>
+            <th>Paciente</th>
+            <th>Teléfono</th>
+            <th>Servicio</th>
+            <th>Cita origen</th>
+            <th>Estado</th>
+            <th style="text-align:right;">Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for seg in seguimientos %}
+          <tr {% if seg.fecha_objetivo < hoy %}style="background:#fff9f9;"{% endif %}>
+            <td>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-weight:500; font-variant-numeric:tabular-nums;
+                  {% if seg.fecha_objetivo < hoy %}color:#c4446a;{% else %}color:var(--text-primary);{% endif %}">
+                  {{ seg.fecha_objetivo|date:"d/m/Y" }}
+                </span>
+                {% if seg.fecha_objetivo < hoy %}
+                  <span class="badge badge-vencido">Vencido</span>
+                {% endif %}
+              </div>
+            </td>
+            <td>
+              <div class="pac-info">
+                <div class="pac-avatar">
+                  {{ seg.paciente.nombres|slice:":1" }}{{ seg.paciente.apellidos|slice:":1" }}
+                </div>
+                <div>
+                  <div class="pac-nombre">{{ seg.paciente.nombres }} {{ seg.paciente.apellidos }}</div>
+                  <div class="pac-rut">{{ seg.paciente.rut }}</div>
+                </div>
+              </div>
+            </td>
+            <td>
+              <a href="tel:{{ seg.paciente.telefono }}"
+                 style="color:var(--accent); text-decoration:none; font-size:0.85rem; font-weight:500;">
+                {{ seg.paciente.telefono }}
+              </a>
+            </td>
+            <td style="color:var(--text-secondary); font-size:0.83rem;">
+              {{ seg.servicio.nombre }}
+            </td>
+            <td style="color:var(--text-muted); font-size:0.8rem;">
+              {% if seg.cita_origen %}
+                {{ seg.cita_origen.fecha|date:"d/m/Y" }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge badge-pendiente">{{ seg.get_estado_display }}</span>
+            </td>
+            <td style="text-align:right;">
+              <form method="post"
+                    action="{% url 'marcar_seguimiento_contactado' seg.id %}"
+                    style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-success btn-sm">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  Contactado
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7">
+              <div class="empty-state">
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+                <p>No hay seguimientos pendientes</p>
+                <p style="margin-top:4px; font-size:0.78rem; color:var(--text-muted);">¡Todo al día!</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+{% endblock %}

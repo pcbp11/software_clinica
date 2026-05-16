@@ -1,0 +1,1070 @@
+{% extends "core/base.html" %}
+{% load clinica_tags %}
+
+{% block title %}Agenda · {{ fecha|date:"d/m/Y" }}{% endblock %}
+{% block page_title %}Agenda{% endblock %}
+{% block page_subtitle %}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .page-content { padding: 0; overflow: hidden; }
+
+  /* ── Barra superior ── */
+  .agenda-bar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 10px 20px; background: var(--bg-card);
+    border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap;
+  }
+  .leyenda { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .leyenda-item { display: flex; align-items: center; gap: 5px; font-size: 0.73rem; color: var(--text-secondary); }
+  .leyenda-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .agenda-bar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .agenda-bar-right select {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px;
+    font-family: var(--font-body); font-size: 0.8rem; color: var(--text-primary);
+    background: var(--bg-card); outline: none; cursor: pointer;
+  }
+  .agenda-bar-right select:focus { border-color: var(--accent); }
+
+  /* ── Nav fecha ── */
+  .nav-dia { font-size: 0.88rem; font-weight: 500; color: var(--text-primary); min-width: 210px; text-align: center; white-space: nowrap; }
+  .nav-dia.es-hoy { color: var(--accent); }
+  .btn-nav {
+    width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--border);
+    background: var(--bg-card); cursor: pointer; display: flex; align-items: center; justify-content: center;
+    color: var(--text-secondary); font-family: var(--font-body); transition: all 0.12s; text-decoration: none;
+  }
+  .btn-nav:hover { background: var(--bg-main); color: var(--text-primary); }
+  .btn-hoy { padding: 0 12px; width: auto; font-size: 0.76rem; font-weight: 500; }
+  .btn-hoy.activo { background: var(--accent-light); color: var(--accent); border-color: #c8e8d8; }
+
+  /* ── Calendario ── */
+  .cal-scroll { overflow: auto; height: calc(100vh - 130px); background: var(--bg-main); }
+  .cal-table { border-collapse: collapse; table-layout: fixed; min-width: 600px; width: 100%; }
+
+  /* Header profesionales */
+  .cal-head-row th {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--bg-card); border-bottom: 2px solid var(--border);
+    padding: 14px 12px 12px; text-align: center; min-width: 180px;
+  }
+  .cal-corner {
+    width: 60px !important; min-width: 60px !important;
+    position: sticky !important; left: 0; z-index: 30 !important;
+    border-right: 1px solid var(--border); background: var(--bg-card) !important;
+  }
+  .pro-avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent) 0%, #3d8468 100%);
+    color: #fff; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 0.85rem; font-weight: 600; margin: 0 auto 6px; letter-spacing: 0.02em;
+  }
+  .pro-name { font-size: 0.78rem; font-weight: 500; color: var(--text-primary); white-space: nowrap; }
+
+  /* Gutter horas */
+  .cal-gutter-td {
+    width: 60px; min-width: 60px; padding: 0; vertical-align: top;
+    border-right: 1px solid var(--border); background: var(--bg-main);
+    position: sticky; left: 0; z-index: 10;
+  }
+  .cal-gutter-inner { position: relative; width: 60px; }
+  .cal-hour-lbl {
+    position: absolute; right: 8px; font-size: 0.68rem; font-weight: 500;
+    color: var(--text-muted); transform: translateY(-50%); white-space: nowrap;
+    font-variant-numeric: tabular-nums; user-select: none;
+  }
+  .now-dot {
+    position: absolute; right: 6px; width: 8px; height: 8px;
+    border-radius: 50%; background: #e53e3e; transform: translateY(-50%); z-index: 5;
+  }
+
+  /* Columna profesional */
+  .cal-col-td { padding: 0; vertical-align: top; border-right: 1px solid var(--border); }
+  .cal-col-inner {
+    position: relative; width: 100%;
+    background-image: repeating-linear-gradient(
+      to bottom, transparent 0px, transparent 27px, rgba(0,0,0,0.04) 27px, rgba(0,0,0,0.04) 28px
+    );
+  }
+  .cal-hour-line { position: absolute; left: 0; right: 0; height: 1px; background: var(--border); z-index: 1; pointer-events: none; }
+  .cal-now-line { position: absolute; left: 0; right: 0; height: 2px; background: #e53e3e; z-index: 4; pointer-events: none; }
+  .cal-now-line::before {
+    content: ''; position: absolute; left: -1px; top: -4px;
+    width: 10px; height: 10px; border-radius: 50%; background: #e53e3e;
+  }
+
+  /* Slot disponible */
+  .cal-slot-btn {
+    position: absolute; left: 2px; right: 2px; height: 26px;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    background: transparent; border: none; border-radius: 4px; cursor: pointer;
+    font-size: 0.68rem; color: var(--accent); font-family: var(--font-body); font-weight: 500;
+    opacity: 0; transition: opacity 0.1s, background 0.1s; z-index: 2;
+  }
+  .cal-col-inner:hover .cal-slot-btn { opacity: 0.55; }
+  .cal-slot-btn:hover { opacity: 1 !important; background: var(--accent-light); }
+
+  /* Tarjeta de cita */
+  .cal-event {
+    position: absolute; left: 3px; right: 3px; border-radius: 6px;
+    padding: 4px 8px; cursor: pointer; z-index: 3; overflow: hidden;
+    border-left: 3px solid transparent; transition: box-shadow 0.12s, filter 0.12s;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.09);
+  }
+  .cal-event:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.15); filter: brightness(0.96); }
+  .cal-event.ocupado { background: #fff0f0; border-left-color: #d9514e; }
+  .cal-event.abonado { background: #fffbf0; border-left-color: #d4810c; }
+  .cal-event.pagado  { background: #eef4ff; border-left-color: #3b6fbf; }
+  .ev-time    { font-size: 0.62rem; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; line-height: 1.3; }
+  .ev-patient { font-size: 0.76rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+  .ev-service { font-size: 0.68rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+
+  /* Sin horario */
+  .sin-horario {
+    display: flex; align-items: center; justify-content: center;
+    padding: 80px 20px; color: var(--text-muted); font-size: 0.875rem;
+    flex-direction: column; gap: 10px;
+  }
+
+  /* ── MODAL BASE ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(15, 20, 40, 0.5);
+    backdrop-filter: blur(5px); z-index: 500;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px; animation: mo-fade 0.18s ease;
+  }
+  @keyframes mo-fade { from { opacity: 0; } to { opacity: 1; } }
+  .modal-card {
+    background: #fff; border-radius: 18px; box-shadow: 0 24px 64px rgba(15,20,40,0.28);
+    width: 100%; max-width: 480px; animation: mo-up 0.22s ease;
+    overflow: hidden; max-height: 90vh; display: flex; flex-direction: column;
+  }
+  @keyframes mo-up {
+    from { opacity: 0; transform: translateY(18px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .modal-head {
+    padding: 22px 24px 0; display: flex; align-items: flex-start;
+    justify-content: space-between; flex-shrink: 0;
+  }
+  .modal-titulo { font-size: 1.05rem; font-weight: 500; color: var(--text-primary); }
+  .modal-cerrar {
+    width: 30px; height: 30px; border-radius: 50%; border: none;
+    background: var(--bg-main); cursor: pointer; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted); font-size: 1.1rem; transition: all 0.15s;
+  }
+  .modal-cerrar:hover { background: var(--border); color: var(--text-primary); }
+  .modal-body { padding: 16px 24px 20px; overflow-y: auto; flex: 1; }
+  .modal-body .form-group { margin-bottom: 16px; }
+  .modal-body label { font-size: 0.77rem; font-weight: 500; color: var(--text-secondary); margin-bottom: 5px; }
+  .modal-footer {
+    padding: 14px 24px; border-top: 1px solid var(--border);
+    display: flex; gap: 10px; justify-content: flex-end;
+    flex-shrink: 0; background: var(--bg-card);
+  }
+
+  /* ── MODAL NUEVA CITA ── */
+  .modal-slot-info {
+    margin: 14px 24px 0; padding: 12px 16px;
+    background: var(--accent-light); border-radius: 10px;
+    display: flex; gap: 16px; flex-shrink: 0;
+  }
+  .slot-info-item { display: flex; flex-direction: column; gap: 2px; }
+  .slot-info-label { font-size: 0.65rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent-hover); opacity: 0.7; }
+  .slot-info-val { font-size: 0.88rem; font-weight: 500; color: var(--accent-hover); }
+  .search-select-wrap { position: relative; }
+  .search-input-top {
+    width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-bottom: none;
+    border-radius: 10px 10px 0 0; font-family: var(--font-body); font-size: 0.85rem;
+    color: var(--text-primary); background: var(--bg-card); outline: none;
+  }
+  .search-input-top:focus { border-color: var(--accent); }
+  .search-select {
+    width: 100%; border-radius: 0 0 10px 10px !important;
+    border: 1px solid var(--border) !important; border-top: none !important;
+    height: 110px; padding: 4px !important; box-shadow: none !important;
+  }
+  .search-select:focus { border-color: var(--accent) !important; box-shadow: none !important; }
+  .search-select option { padding: 5px 8px; border-radius: 6px; font-size: 0.85rem; }
+  .servicio-info { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+  .info-chip {
+    display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px;
+    background: var(--bg-main); border-radius: 20px; font-size: 0.75rem;
+    color: var(--text-secondary); border: 1px solid var(--border);
+  }
+  .info-chip strong { color: var(--text-primary); }
+
+  /* ── MODAL DETALLE CITA ── */
+  .md-card { max-width: 520px !important; }
+  .md-head-inner { flex: 1; min-width: 0; }
+  .md-nombre { font-size: 1.05rem; font-weight: 600; color: var(--text-primary); line-height: 1.3; }
+  .md-sub { font-size: 0.78rem; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Pills de info */
+  .md-pills { display: flex; flex-wrap: wrap; gap: 6px; padding: 14px 24px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .md-pill {
+    display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px;
+    border-radius: 20px; font-size: 0.74rem; background: var(--bg-main);
+    border: 1px solid var(--border); color: var(--text-secondary);
+  }
+  .md-pill strong { color: var(--text-primary); }
+  .md-estado-badge {
+    display: inline-flex; align-items: center; padding: 4px 11px;
+    border-radius: 20px; font-size: 0.74rem; font-weight: 600;
+    border: 1.5px solid;
+  }
+
+  /* Sección */
+  .md-section { margin-bottom: 20px; }
+  .md-section:last-child { margin-bottom: 0; }
+  .md-section-label {
+    font-size: 0.67rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.09em; color: var(--text-muted); margin-bottom: 8px;
+  }
+
+  /* Botones de estado */
+  .md-estados { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .md-estado-btn {
+    padding: 5px 13px; border-radius: 20px; border: 1.5px solid;
+    cursor: pointer; font-size: 0.74rem; font-weight: 500;
+    font-family: var(--font-body); background: transparent;
+    transition: background 0.12s, color 0.12s;
+  }
+  .md-estado-btn:hover { opacity: 0.85; }
+  .md-arrow { font-size: 0.75rem; color: var(--text-muted); padding: 0 2px; }
+
+  /* Observaciones */
+  .md-obs-box {
+    font-size: 0.82rem; color: var(--text-secondary);
+    background: var(--bg-main); border-radius: 8px; padding: 8px 12px;
+    border: 1px solid var(--border); margin: 0;
+  }
+
+  /* Pago resumen */
+  .md-pago-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .md-pago-pill {
+    flex: 1; padding: 10px 12px; border-radius: 10px;
+    background: var(--bg-main); border: 1px solid var(--border); text-align: center;
+  }
+  .md-pago-pill-lbl { font-size: 0.64rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
+  .md-pago-pill-val { font-size: 0.92rem; font-weight: 700; }
+
+  /* Historial pagos */
+  .md-pago-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 0.78rem;
+  }
+  .md-pago-item:last-child { border-bottom: none; }
+  .md-pago-item .metodo { color: var(--text-muted); font-size: 0.72rem; }
+
+  /* Form registro pago */
+  .md-pago-form {
+    background: var(--bg-main); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px; margin-top: 10px;
+  }
+  .md-pago-form .row2 { display: flex; gap: 8px; margin-bottom: 10px; }
+  .md-pago-form .row2 > * { flex: 1; }
+  .md-error {
+    font-size: 0.76rem; color: #d9514e; padding: 6px 10px;
+    background: #fff0f0; border-radius: 6px; margin-top: 6px;
+  }
+
+  /* Vista reagendar */
+  .md-reagendar { padding: 0; }
+  .md-reagendar p { font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 14px; }
+  .rd-fields { display: flex; gap: 10px; }
+  .rd-fields > div { flex: 1; }
+  .rd-fields label { font-size: 0.77rem; font-weight: 500; color: var(--text-secondary); margin-bottom: 5px; display: block; }
+
+  /* Spinner loading */
+  .md-loading {
+    display: flex; align-items: center; justify-content: center;
+    padding: 48px; gap: 10px; color: var(--text-muted); font-size: 0.85rem;
+  }
+  .spinner {
+    width: 20px; height: 20px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<div style="display:flex; align-items:center; gap:6px;">
+  <a href="?fecha={{ fecha_anterior|date:'Y-m-d' }}&servicio={{ servicio_id }}" class="btn-nav">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="15 18 9 12 15 6"/></svg>
+  </a>
+  <span class="nav-dia {% if fecha == hoy %}es-hoy{% endif %}">
+    {{ fecha|date:"l j \d\e F" }}{% if fecha == hoy %} · <span style="font-weight:400; font-size:0.82rem;">Hoy</span>{% endif %}
+  </span>
+  <a href="?fecha={{ fecha_siguiente|date:'Y-m-d' }}&servicio={{ servicio_id }}" class="btn-nav">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"/></svg>
+  </a>
+  <a href="?fecha={{ hoy|date:'Y-m-d' }}&servicio={{ servicio_id }}"
+     class="btn-nav btn-hoy {% if fecha == hoy %}activo{% endif %}">Hoy</a>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<!-- Filtros + leyenda -->
+<div class="agenda-bar">
+  <div class="leyenda">
+    <div class="leyenda-item"><span class="leyenda-dot" style="background:var(--accent);"></span>Disponible</div>
+    <div class="leyenda-item"><span class="leyenda-dot" style="background:#d9514e;"></span>Sin pago</div>
+    <div class="leyenda-item"><span class="leyenda-dot" style="background:#d4810c;"></span>Abonado</div>
+    <div class="leyenda-item"><span class="leyenda-dot" style="background:#3b6fbf;"></span>Pagado</div>
+  </div>
+  <div class="agenda-bar-right">
+    <form method="get" style="display:flex; gap:8px; align-items:center;">
+      <input type="hidden" name="fecha" value="{{ fecha|date:'Y-m-d' }}">
+      <select name="servicio" onchange="this.form.submit()">
+        <option value="">Todos los servicios</option>
+        {% for s in servicios %}
+          <option value="{{ s.id }}" {% if servicio_id == s.id|stringformat:"s" %}selected{% endif %}>{{ s.nombre }}</option>
+        {% endfor %}
+      </select>
+    </form>
+    <button onclick="abrirModalLibre()" class="btn btn-primary" style="gap:6px; padding:7px 16px; font-size:0.82rem;" type="button">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Nueva cita
+    </button>
+  </div>
+</div>
+
+<!-- ── CALENDARIO ── -->
+{% if not agenda_general %}
+  <div class="sin-horario">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:0.2;">
+      <rect x="3" y="4" width="18" height="18" rx="2"/>
+      <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+      <line x1="3" y1="10" x2="21" y2="10"/>
+    </svg>
+    <p>No hay profesionales activos configurados.</p>
+  </div>
+{% elif not total_height_px %}
+  <div class="sin-horario">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:0.2;">
+      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+    </svg>
+    <p>Ningún profesional tiene horario configurado para <strong>{{ fecha|date:"l j \d\e F" }}</strong>.</p>
+  </div>
+{% else %}
+<div class="cal-scroll">
+  <table class="cal-table">
+    <thead>
+      <tr class="cal-head-row">
+        <th class="cal-corner"></th>
+        {% for item in agenda_general %}
+        <th>
+          <div class="pro-avatar">{{ item.profesional.nombres|slice:":1" }}{{ item.profesional.apellidos|slice:":1" }}</div>
+          <div class="pro-name">{{ item.profesional.nombres }} {{ item.profesional.apellidos }}</div>
+        </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <!-- Gutter de horas -->
+        <td class="cal-gutter-td">
+          <div class="cal-gutter-inner" style="height:{{ total_height_px }}px;">
+            {% for lbl in horas_labels %}
+            <div class="cal-hour-lbl" style="top:{{ lbl.top_px }}px;">{{ lbl.label }}</div>
+            {% endfor %}
+            {% if hora_now_top %}
+            <div class="now-dot" style="top:{{ hora_now_top }}px;"></div>
+            {% endif %}
+          </div>
+        </td>
+
+        <!-- Columna por profesional -->
+        {% for item in agenda_general %}
+        <td class="cal-col-td">
+          <div class="cal-col-inner" style="height:{{ total_height_px }}px;">
+
+            {% for lbl in horas_labels %}
+            <div class="cal-hour-line" style="top:{{ lbl.top_px }}px;"></div>
+            {% endfor %}
+
+            {% if hora_now_top %}
+            <div class="cal-now-line" style="top:{{ hora_now_top }}px;"></div>
+            {% endif %}
+
+            {% for slot in item.slots_render %}
+            <button class="cal-slot-btn"
+                    style="top:{{ slot.top_px }}px;"
+                    data-prof-id="{{ item.profesional.id }}"
+                    data-prof="{{ item.profesional|escapejs }}"
+                    data-fecha="{{ fecha|date:'Y-m-d' }}"
+                    data-hora="{{ slot.hora }}"
+                    onclick="abrirModalBtn(this)"
+                    type="button">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              {{ slot.hora }}
+            </button>
+            {% endfor %}
+
+            {% for ev in item.citas_render %}
+            <div class="cal-event {{ ev.estado }}"
+                 style="top:{{ ev.top_px }}px; height:{{ ev.height_px }}px;"
+                 title="{{ ev.cita.paciente.nombres }} {{ ev.cita.paciente.apellidos }} · {{ ev.cita.servicio.nombre }}"
+                 onclick="abrirDetalleCita({{ ev.cita.id }})">
+              <div class="ev-time">{{ ev.cita.hora_inicio|time:"H:i" }}–{% if ev.cita.hora_fin %}{{ ev.cita.hora_fin|time:"H:i" }}{% endif %}</div>
+              <div class="ev-patient">{{ ev.cita.paciente.nombres }} {{ ev.cita.paciente.apellidos }}</div>
+              {% if ev.height_px > 48 %}
+              <div class="ev-service">{{ ev.cita.servicio.nombre }}</div>
+              {% endif %}
+            </div>
+            {% endfor %}
+
+          </div>
+        </td>
+        {% endfor %}
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+
+<!-- ══════════════════════════════════════════
+     MODAL: Nueva cita
+══════════════════════════════════════════ -->
+<div id="modal-cita" class="modal-overlay" style="display:none;" onclick="if(event.target===this)cerrarModal()">
+  <div class="modal-card">
+    <div class="modal-head">
+      <span class="modal-titulo">Nueva cita</span>
+      <button class="modal-cerrar" onclick="cerrarModal()" type="button">×</button>
+    </div>
+
+    <div class="modal-slot-info">
+      <div class="slot-info-item">
+        <span class="slot-info-label">Profesional</span>
+        <span class="slot-info-val" id="m-info-prof">—</span>
+      </div>
+      <div class="slot-info-item">
+        <span class="slot-info-label">Fecha</span>
+        <span class="slot-info-val" id="m-info-fecha">—</span>
+      </div>
+      <div class="slot-info-item">
+        <span class="slot-info-label">Hora inicio</span>
+        <span class="slot-info-val" id="m-info-hora">—</span>
+      </div>
+    </div>
+
+    <form method="post" action="{% url 'crear_cita' %}" id="form-cita">
+      {% csrf_token %}
+      <input type="hidden" name="profesional" id="m-profesional">
+      <input type="hidden" name="fecha"       id="m-fecha">
+      <input type="hidden" name="hora_inicio" id="m-hora">
+
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Paciente</label>
+          <div class="search-select-wrap">
+            <input type="text" class="search-input-top" placeholder="Buscar por nombre o RUT..."
+                   oninput="filtrarOpciones(this, 'm-paciente')" autocomplete="off">
+            <select id="m-paciente" name="paciente" required class="search-select" size="4">
+              {% for p in pacientes %}
+              <option value="{{ p.id }}" data-search="{{ p.nombres|lower }} {{ p.apellidos|lower }} {{ p.rut }}">
+                {{ p.nombres }} {{ p.apellidos }} · {{ p.rut }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          {% if not pacientes %}
+          <p style="font-size:0.78rem; color:#d4810c; margin-top:6px;">
+            No hay pacientes activos. <a href="/admin/core/paciente/add/" target="_blank" style="color:var(--accent);">Crear uno →</a>
+          </p>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label>Servicio</label>
+          <select id="m-servicio" name="servicio" required onchange="actualizarInfoServicio(this)">
+            <option value="">— Selecciona un servicio —</option>
+            {% for s in servicios %}
+            <option value="{{ s.id }}" data-precio="{{ s.precio }}" data-duracion="{{ s.duracion_minutos }}"
+                    {% if servicio_id == s.id|stringformat:"s" %}selected{% endif %}>
+              {{ s.nombre }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="servicio-info" id="m-servicio-info" style="display:none;">
+            <span class="info-chip">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+              <strong id="m-precio-val"></strong>
+            </span>
+            <span class="info-chip">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <strong id="m-duracion-val"></strong>
+            </span>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Observaciones <span style="color:var(--text-muted); font-weight:400;">(opcional)</span></label>
+          <textarea name="observaciones" placeholder="Notas adicionales..." style="min-height:60px; resize:none;"></textarea>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" onclick="cerrarModal()" class="btn btn-ghost">Cancelar</button>
+        <button type="submit" class="btn btn-primary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="20 6 9 17 4 12"/></svg>
+          Confirmar cita
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     MODAL: Detalle de cita
+══════════════════════════════════════════ -->
+<div id="modal-detalle" class="modal-overlay" style="display:none;" onclick="if(event.target===this)cerrarDetalle()">
+  <div class="modal-card md-card">
+
+    <!-- Header -->
+    <div class="modal-head" style="gap:12px; padding-bottom:14px; border-bottom:1px solid var(--border);">
+      <div class="md-head-inner">
+        <div class="md-nombre" id="md-nombre">—</div>
+        <div class="md-sub" id="md-sub">—</div>
+      </div>
+      <button class="modal-cerrar" onclick="cerrarDetalle()" type="button">×</button>
+    </div>
+
+    <!-- Loading -->
+    <div class="md-loading" id="md-loading">
+      <div class="spinner"></div>
+      Cargando...
+    </div>
+
+    <!-- Contenido principal -->
+    <div id="md-main" style="display:none; flex:1; overflow:hidden; display:none; flex-direction:column;">
+
+      <!-- Pills de info -->
+      <div class="md-pills" id="md-pills"></div>
+
+      <!-- Vista: info + estado + pago -->
+      <div id="md-view-info" class="modal-body">
+
+        <!-- Estado -->
+        <div class="md-section">
+          <div class="md-section-label">Estado</div>
+          <div class="md-estados" id="md-estados"></div>
+        </div>
+
+        <!-- Observaciones -->
+        <div class="md-section" id="md-obs-section" style="display:none;">
+          <div class="md-section-label">Observaciones</div>
+          <p class="md-obs-box" id="md-obs"></p>
+        </div>
+
+        <!-- Pago -->
+        <div class="md-section" style="margin-bottom:0;">
+          <div class="md-section-label">Pago</div>
+          <div class="md-pago-row">
+            <div class="md-pago-pill">
+              <div class="md-pago-pill-lbl">Total</div>
+              <div class="md-pago-pill-val" id="md-total" style="color:var(--text-primary);">—</div>
+            </div>
+            <div class="md-pago-pill">
+              <div class="md-pago-pill-lbl">Pagado</div>
+              <div class="md-pago-pill-val" id="md-pagado" style="color:#2e7d55;">—</div>
+            </div>
+            <div class="md-pago-pill">
+              <div class="md-pago-pill-lbl">Saldo</div>
+              <div class="md-pago-pill-val" id="md-saldo">—</div>
+            </div>
+          </div>
+
+          <!-- Historial de pagos -->
+          <div id="md-pagos-list"></div>
+
+          <!-- Botón + form -->
+          <button id="md-btn-pago" onclick="togglePagoForm()" type="button"
+                  class="btn btn-ghost" style="font-size:0.78rem; padding:6px 14px; margin-top:4px;">
+            + Registrar pago
+          </button>
+
+          <div id="md-pago-form" style="display:none;" class="md-pago-form">
+            <div class="row2">
+              <div>
+                <label style="font-size:0.77rem; font-weight:500; color:var(--text-secondary); margin-bottom:5px;">Monto</label>
+                <input type="text" id="md-pago-monto" placeholder="$0" inputmode="numeric"
+                       oninput="formatMonto(this)" style="font-size:0.9rem; font-weight:600;">
+              </div>
+              <div>
+                <label style="font-size:0.77rem; font-weight:500; color:var(--text-secondary); margin-bottom:5px;">Método</label>
+                <select id="md-pago-metodo">
+                  <option value="efectivo">Efectivo</option>
+                  <option value="debito">Débito</option>
+                  <option value="credito">Crédito</option>
+                  <option value="transferencia">Transferencia</option>
+                  <option value="webpay">WebPay</option>
+                </select>
+              </div>
+            </div>
+            <div style="margin-bottom:10px;">
+              <label style="font-size:0.77rem; font-weight:500; color:var(--text-secondary); margin-bottom:5px;">Observación <span style="font-weight:400; color:var(--text-muted);">(opcional)</span></label>
+              <input type="text" id="md-pago-obs" placeholder="Ej: 50% anticipo">
+            </div>
+            <div id="md-pago-error" class="md-error" style="display:none;"></div>
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:4px;">
+              <button type="button" onclick="togglePagoForm()" class="btn btn-ghost" style="font-size:0.78rem;">Cancelar</button>
+              <button type="button" onclick="registrarPago()" class="btn btn-primary" style="font-size:0.78rem;">Registrar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vista: reagendar -->
+      <div id="md-view-reagendar" style="display:none;" class="modal-body md-reagendar">
+        <p>La cita actual quedará marcada como <strong>Reprogramada</strong> y se creará una nueva en la fecha indicada.</p>
+        <div class="rd-fields">
+          <div>
+            <label>Nueva fecha</label>
+            <input type="date" id="rd-fecha">
+          </div>
+          <div>
+            <label>Nueva hora</label>
+            <input type="time" id="rd-hora" step="900">
+          </div>
+        </div>
+        <div id="rd-error" class="md-error" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- Footer principal -->
+    <div class="modal-footer" id="md-footer-main" style="display:none; justify-content:space-between;">
+      <button type="button" onclick="mostrarReagendar()" class="btn btn-ghost" style="font-size:0.82rem;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Reagendar
+      </button>
+      <button type="button" onclick="cerrarDetalle()" class="btn btn-ghost">Cerrar</button>
+    </div>
+
+    <!-- Footer reagendar -->
+    <div class="modal-footer" id="md-footer-reagendar" style="display:none;">
+      <button type="button" onclick="ocultarReagendar()" class="btn btn-ghost">← Volver</button>
+      <button type="button" onclick="confirmarReagendar()" class="btn btn-primary" id="rd-btn">Confirmar reagendar</button>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  /* ─── Utilidades ─────────────────────────────────── */
+  const DIAS_ES  = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+  function formatearFecha(fechaStr) {
+    const [y, m, d] = fechaStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    return `${DIAS_ES[dt.getDay()]} ${d} de ${MESES_ES[m - 1]}`;
+  }
+
+  function getCsrf() {
+    return document.querySelector('[name=csrfmiddlewaretoken]').value;
+  }
+
+  function formatMonto(input) {
+    const raw = input.value.replace(/\D/g, '');
+    input.value = raw ? '$' + parseInt(raw).toLocaleString('es-CL') : '';
+  }
+
+  /* ─── Modal: NUEVA CITA ──────────────────────────── */
+  function abrirModalBtn(btn) {
+    abrirModal(btn.dataset.profId, btn.dataset.prof, btn.dataset.fecha, btn.dataset.hora);
+  }
+
+  function abrirModal(profId, profNombre, fecha, hora) {
+    document.getElementById('m-profesional').value = profId;
+    document.getElementById('m-fecha').value = fecha;
+    document.getElementById('m-hora').value = hora;
+    document.getElementById('m-info-prof').textContent  = profNombre;
+    document.getElementById('m-info-fecha').textContent = formatearFecha(fecha);
+    document.getElementById('m-info-hora').textContent  = hora;
+    document.getElementById('modal-cita').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => { const i = document.querySelector('.search-input-top'); if (i) i.focus(); }, 80);
+  }
+
+  function abrirModalLibre() {
+    const fechaInput = document.querySelector('input[name="fecha"]');
+    const fecha = fechaInput ? fechaInput.value : '{{ fecha|date:"Y-m-d" }}';
+    document.getElementById('m-profesional').value = '';
+    document.getElementById('m-fecha').value = fecha;
+    document.getElementById('m-hora').value = '';
+    document.getElementById('m-info-prof').textContent  = '—';
+    document.getElementById('m-info-fecha').textContent = formatearFecha(fecha);
+    document.getElementById('m-info-hora').textContent  = '—';
+    document.getElementById('modal-cita').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => { const i = document.querySelector('.search-input-top'); if (i) i.focus(); }, 80);
+  }
+
+  function cerrarModal() {
+    document.getElementById('modal-cita').style.display = 'none';
+    document.body.style.overflow = '';
+    const inp = document.querySelector('.search-input-top');
+    if (inp) { inp.value = ''; filtrarOpciones(inp, 'm-paciente'); }
+  }
+
+  function filtrarOpciones(input, selectId) {
+    const texto = input.value.toLowerCase().trim();
+    const select = document.getElementById(selectId);
+    let primero = null;
+    Array.from(select.options).forEach(opt => {
+      const visible = !texto || (opt.dataset.search || opt.textContent.toLowerCase()).includes(texto);
+      opt.hidden = !visible;
+      if (visible && !primero) primero = opt;
+    });
+    if (primero && !Array.from(select.options).find(o => !o.hidden && o.selected)) {
+      select.value = primero.value;
+    }
+  }
+
+  function actualizarInfoServicio(sel) {
+    const opt = sel.options[sel.selectedIndex];
+    const precio = parseInt(opt.dataset.precio || 0);
+    const duracion = opt.dataset.duracion || 0;
+    const wrap = document.getElementById('m-servicio-info');
+    if (sel.value && precio) {
+      document.getElementById('m-precio-val').textContent = '$' + precio.toLocaleString('es-CL');
+      document.getElementById('m-duracion-val').textContent = duracion + ' min';
+      wrap.style.display = 'flex';
+    } else {
+      wrap.style.display = 'none';
+    }
+  }
+
+  /* ─── Modal: DETALLE CITA ────────────────────────── */
+  const ESTADOS_CFG = {
+    reservado:    { label: 'Reservado',    color: '#3b6fbf' },
+    pendiente:    { label: 'Pendiente',    color: '#888'    },
+    confirmado:   { label: 'Confirmado',   color: '#2e7d55' },
+    en_espera:    { label: 'En espera',    color: '#d4810c' },
+    asistio:      { label: 'Asistió',      color: '#1a5c3a' },
+    no_asistio:   { label: 'No asistió',   color: '#d9514e' },
+    cancelada:    { label: 'Cancelada',    color: '#888'    },
+    reprogramada: { label: 'Reprogramada', color: '#8b5cf6' },
+  };
+  const CAMBIOS_ESTADO = [
+    { key: 'en_espera',  label: 'En espera'  },
+    { key: 'confirmado', label: 'Confirmado' },
+    { key: 'asistio',    label: 'Asistió'    },
+    { key: 'no_asistio', label: 'No asistió' },
+    { key: 'cancelada',  label: 'Cancelar'   },
+  ];
+  const ESTADOS_FINALES = ['asistio', 'no_asistio', 'cancelada', 'reprogramada'];
+
+  let _cita = null;
+  let _needsReload = false;
+
+  async function abrirDetalleCita(citaId) {
+    _needsReload = false;
+    document.getElementById('modal-detalle').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    // Reset a loading
+    document.getElementById('md-loading').style.display = 'flex';
+    const main = document.getElementById('md-main');
+    main.style.display = 'none';
+    document.getElementById('md-footer-main').style.display = 'none';
+    document.getElementById('md-footer-reagendar').style.display = 'none';
+    document.getElementById('md-nombre').textContent = '—';
+    document.getElementById('md-sub').textContent = '—';
+
+    try {
+      const resp = await fetch(`/citas/${citaId}/detalle/`);
+      if (!resp.ok) throw new Error('Error ' + resp.status);
+      _cita = await resp.json();
+      renderDetalle(_cita);
+    } catch(e) {
+      document.getElementById('md-loading').innerHTML = '<span style="color:#d9514e;">No se pudo cargar la cita.</span>';
+    }
+  }
+
+  function renderDetalle(d) {
+    // Header
+    document.getElementById('md-nombre').textContent = d.paciente;
+    document.getElementById('md-sub').textContent = `${d.profesional} · ${d.servicio}`;
+
+    // Pills de info
+    const pills = document.getElementById('md-pills');
+    pills.innerHTML = `
+      <span class="md-pill">📅 <strong>${d.fecha}</strong></span>
+      <span class="md-pill">⏰ <strong>${d.hora_inicio}${d.hora_fin ? ' – ' + d.hora_fin : ''}</strong></span>
+    `;
+    if (d.paciente_telefono) {
+      pills.innerHTML += `<span class="md-pill">📞 <strong>${d.paciente_telefono}</strong></span>`;
+    }
+
+    // Estado
+    renderEstados(d.estado);
+
+    // Observaciones
+    if (d.observaciones) {
+      document.getElementById('md-obs').textContent = d.observaciones;
+      document.getElementById('md-obs-section').style.display = '';
+    } else {
+      document.getElementById('md-obs-section').style.display = 'none';
+    }
+
+    // Pago
+    document.getElementById('md-total').textContent  = d.monto_total_fmt;
+    document.getElementById('md-pagado').textContent = d.monto_pagado_fmt;
+    actualizarSaldo(d.saldo_pendiente, d.saldo_pendiente_fmt);
+    renderPagos(d.pagos);
+    document.getElementById('md-btn-pago').style.display  = d.saldo_pendiente > 0 ? '' : 'none';
+    document.getElementById('md-pago-form').style.display = 'none';
+    document.getElementById('md-pago-monto').value = '';
+    document.getElementById('md-pago-obs').value   = '';
+    document.getElementById('md-pago-error').style.display = 'none';
+
+    // Mostrar
+    document.getElementById('md-loading').style.display = 'none';
+    const main = document.getElementById('md-main');
+    main.style.display = 'flex';
+    ocultarReagendar();
+    document.getElementById('md-footer-main').style.display = 'flex';
+  }
+
+  function renderEstados(estadoActual) {
+    const wrap = document.getElementById('md-estados');
+    wrap.innerHTML = '';
+
+    // Badge estado actual
+    const cfg = ESTADOS_CFG[estadoActual] || { label: estadoActual, color: '#888' };
+    const badge = document.createElement('span');
+    badge.className = 'md-estado-badge';
+    badge.style.color = cfg.color;
+    badge.style.borderColor = cfg.color + '60';
+    badge.style.background  = cfg.color + '15';
+    badge.textContent = cfg.label;
+    wrap.appendChild(badge);
+
+    // Botones de cambio (solo si no es estado final)
+    if (!ESTADOS_FINALES.includes(estadoActual)) {
+      const arrow = document.createElement('span');
+      arrow.className = 'md-arrow';
+      arrow.textContent = '→';
+      wrap.appendChild(arrow);
+
+      CAMBIOS_ESTADO.forEach(e => {
+        if (e.key === estadoActual) return;
+        const c = ESTADOS_CFG[e.key];
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'md-estado-btn';
+        btn.textContent = e.label;
+        btn.style.color = c.color;
+        btn.style.borderColor = c.color + '60';
+        btn.onclick = () => cambiarEstado(e.key);
+        wrap.appendChild(btn);
+      });
+    }
+  }
+
+  function actualizarSaldo(saldo, saldoFmt) {
+    const el = document.getElementById('md-saldo');
+    el.textContent = saldoFmt;
+    el.style.color = saldo > 0 ? '#d9514e' : '#2e7d55';
+  }
+
+  function renderPagos(pagos) {
+    const list = document.getElementById('md-pagos-list');
+    list.innerHTML = '';
+    if (!pagos || pagos.length === 0) return;
+    pagos.forEach(p => {
+      const item = document.createElement('div');
+      item.className = 'md-pago-item';
+      item.innerHTML = `
+        <span><strong>${p.monto_fmt}</strong> <span class="metodo">· ${p.metodo} · ${p.fecha}</span></span>
+      `;
+      list.appendChild(item);
+    });
+  }
+
+  async function cambiarEstado(nuevoEstado) {
+    if (!_cita) return;
+    const form = new FormData();
+    form.append('estado', nuevoEstado);
+    try {
+      const resp = await fetch(`/citas/${_cita.id}/estado/`, {
+        method: 'POST', body: form, headers: { 'X-CSRFToken': getCsrf() }
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        _cita.estado = data.estado;
+        renderEstados(data.estado);
+        _needsReload = true;
+        // Si es estado final, ocultar botón reagendar
+        if (ESTADOS_FINALES.includes(data.estado)) {
+          document.getElementById('md-footer-main').querySelector('button').style.display = 'none';
+        }
+      }
+    } catch(e) { console.error(e); }
+  }
+
+  function togglePagoForm() {
+    const form = document.getElementById('md-pago-form');
+    const visible = form.style.display !== 'none';
+    form.style.display = visible ? 'none' : '';
+    if (!visible) setTimeout(() => document.getElementById('md-pago-monto').focus(), 50);
+  }
+
+  async function registrarPago() {
+    if (!_cita) return;
+    const montoRaw = document.getElementById('md-pago-monto').value.replace(/\D/g, '');
+    const monto  = parseInt(montoRaw || '0');
+    const metodo = document.getElementById('md-pago-metodo').value;
+    const obs    = document.getElementById('md-pago-obs').value;
+    const errEl  = document.getElementById('md-pago-error');
+
+    if (!monto || monto <= 0) {
+      errEl.textContent = 'Ingresa un monto válido.';
+      errEl.style.display = '';
+      return;
+    }
+    errEl.style.display = 'none';
+
+    const form = new FormData();
+    form.append('monto', monto);
+    form.append('metodo', metodo);
+    form.append('observacion', obs);
+
+    try {
+      const resp = await fetch(`/citas/${_cita.id}/pago/`, {
+        method: 'POST', body: form, headers: { 'X-CSRFToken': getCsrf() }
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        // Actualizar montos
+        document.getElementById('md-pagado').textContent = data.monto_pagado_fmt;
+        actualizarSaldo(data.saldo_pendiente, data.saldo_pendiente_fmt);
+
+        // Agregar al historial
+        _cita.pagos = (_cita.pagos || []).concat([{
+          monto_fmt: data.pago_monto_fmt,
+          metodo: data.pago_metodo,
+          fecha: data.pago_fecha,
+        }]);
+        renderPagos(_cita.pagos);
+
+        // Limpiar form
+        document.getElementById('md-pago-monto').value = '';
+        document.getElementById('md-pago-obs').value   = '';
+        document.getElementById('md-pago-form').style.display = 'none';
+
+        if (data.saldo_pendiente <= 0) {
+          document.getElementById('md-btn-pago').style.display = 'none';
+        }
+        _needsReload = true;
+      } else {
+        errEl.textContent = data.error || 'Error al registrar el pago.';
+        errEl.style.display = '';
+      }
+    } catch(e) {
+      errEl.textContent = 'Error de conexión.';
+      errEl.style.display = '';
+    }
+  }
+
+  function mostrarReagendar() {
+    document.getElementById('md-view-info').style.display = 'none';
+    document.getElementById('md-view-reagendar').style.display = '';
+    document.getElementById('md-footer-main').style.display = 'none';
+    document.getElementById('md-footer-reagendar').style.display = 'flex';
+    document.getElementById('rd-error').style.display = 'none';
+    // Pre-llenar con fecha/hora actual de la cita
+    if (_cita) {
+      document.getElementById('rd-fecha').value = _cita.fecha_iso;
+      document.getElementById('rd-hora').value  = _cita.hora_inicio;
+    }
+  }
+
+  function ocultarReagendar() {
+    document.getElementById('md-view-info').style.display = '';
+    document.getElementById('md-view-reagendar').style.display = 'none';
+    document.getElementById('md-footer-reagendar').style.display = 'none';
+    document.getElementById('rd-error').style.display = 'none';
+  }
+
+  async function confirmarReagendar() {
+    if (!_cita) return;
+    const fecha = document.getElementById('rd-fecha').value;
+    const hora  = document.getElementById('rd-hora').value;
+    const errEl = document.getElementById('rd-error');
+    const btn   = document.getElementById('rd-btn');
+
+    if (!fecha || !hora) {
+      errEl.textContent = 'Selecciona fecha y hora.';
+      errEl.style.display = '';
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Reagendando...';
+    errEl.style.display = 'none';
+
+    const form = new FormData();
+    form.append('nueva_fecha', fecha);
+    form.append('nueva_hora', hora);
+
+    try {
+      const resp = await fetch(`/citas/${_cita.id}/reagendar/`, {
+        method: 'POST', body: form, headers: { 'X-CSRFToken': getCsrf() }
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        window.location.href = data.redirect;
+      } else {
+        errEl.textContent = data.error || 'No se pudo reagendar.';
+        errEl.style.display = '';
+        btn.disabled = false;
+        btn.textContent = 'Confirmar reagendar';
+      }
+    } catch(e) {
+      errEl.textContent = 'Error de conexión.';
+      errEl.style.display = '';
+      btn.disabled = false;
+      btn.textContent = 'Confirmar reagendar';
+    }
+  }
+
+  function cerrarDetalle() {
+    document.getElementById('modal-detalle').style.display = 'none';
+    document.body.style.overflow = '';
+    if (_needsReload) window.location.reload();
+  }
+
+  /* ─── Cierre con Escape ──────────────────────────── */
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('modal-detalle').style.display !== 'none') { cerrarDetalle(); return; }
+    if (document.getElementById('modal-cita').style.display !== 'none') cerrarModal();
+  });
+
+  /* ─── DOMContentLoaded ───────────────────────────── */
+  window.addEventListener('DOMContentLoaded', () => {
+    const sel = document.getElementById('m-servicio');
+    if (sel && sel.value) actualizarInfoServicio(sel);
+
+    {% if hora_now_top %}
+    const scroll = document.querySelector('.cal-scroll');
+    if (scroll) {
+      const target = {{ hora_now_top }} - (scroll.clientHeight / 2);
+      scroll.scrollTop = Math.max(0, target);
+    }
+    {% endif %}
+  });
+</script>
+{% endblock %}

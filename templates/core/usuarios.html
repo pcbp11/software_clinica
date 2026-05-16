@@ -1,0 +1,274 @@
+{% extends "core/base.html" %}
+{% load clinica_tags %}
+
+{% block title %}Usuarios{% endblock %}
+{% block page_title %}Usuarios{% endblock %}
+{% block page_subtitle %}Gestión de acceso al sistema{% endblock %}
+
+{% block topbar_actions %}
+  <button class="btn btn-primary" onclick="abrirModal()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+      <line x1="12" y1="5" x2="12" y2="19"/>
+      <line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+    Nuevo usuario
+  </button>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .modal-overlay { position:fixed; inset:0; background:rgba(15,20,40,0.5); backdrop-filter:blur(5px); z-index:500; display:flex; align-items:center; justify-content:center; padding:20px; animation:mo-fade 0.18s ease; }
+  @keyframes mo-fade { from{opacity:0} to{opacity:1} }
+  .modal-card { background:#fff; border-radius:18px; box-shadow:0 24px 64px rgba(15,20,40,0.28); width:100%; max-width:520px; animation:mo-up 0.22s ease; overflow:hidden; max-height:90vh; display:flex; flex-direction:column; }
+  @keyframes mo-up { from{opacity:0;transform:translateY(18px) scale(0.97)} to{opacity:1;transform:translateY(0) scale(1)} }
+  .modal-head { padding:22px 24px 0; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+  .modal-titulo { font-size:1.05rem; font-weight:500; color:var(--text-primary); }
+  .modal-cerrar { width:30px; height:30px; border-radius:50%; border:none; background:var(--bg-main); cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:1.1rem; transition:all 0.15s; }
+  .modal-cerrar:hover { background:var(--border); color:var(--text-primary); }
+  .modal-body { padding:20px 24px; overflow-y:auto; flex:1; }
+  .modal-body .form-group { margin-bottom:14px; }
+  .modal-footer { padding:14px 24px; border-top:1px solid var(--border); display:flex; gap:10px; justify-content:flex-end; flex-shrink:0; background:var(--bg-card); }
+
+  .usuario-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--accent-light);
+    color: var(--accent);
+    font-size: 0.8rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .usuario-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .usuario-nombre {
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 0.88rem;
+  }
+  .usuario-username {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+  .badge-activo {
+    background: var(--accent-light);
+    color: var(--accent);
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 0.73rem;
+    font-weight: 500;
+  }
+  .badge-inactivo {
+    background: #f0f0f0;
+    color: var(--text-muted);
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 0.73rem;
+    font-weight: 500;
+  }
+  .badge-admin {
+    background: #fef3c7;
+    color: #b45309;
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .toggle-form {
+    display: inline;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Usuarios del sistema</span>
+      {% if usuarios %}
+      <span style="font-size:0.78rem; color:var(--text-muted);">
+        {{ usuarios|length }} usuario{{ usuarios|length|pluralize:"s" }}
+      </span>
+      {% endif %}
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Email</th>
+            <th>Rol</th>
+            <th>Admin</th>
+            <th>Estado</th>
+            <th style="text-align:right;">Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in usuarios %}
+          <tr>
+            <td>
+              <div class="usuario-info">
+                <div class="usuario-avatar">
+                  {% if u.first_name %}{{ u.first_name|slice:":1" }}{% else %}{{ u.username|slice:":1"|upper }}{% endif %}{% if u.last_name %}{{ u.last_name|slice:":1" }}{% endif %}
+                </div>
+                <div>
+                  <div class="usuario-nombre">
+                    {% if u.first_name or u.last_name %}
+                      {{ u.first_name }} {{ u.last_name }}
+                    {% else %}
+                      {{ u.username }}
+                    {% endif %}
+                  </div>
+                  <div class="usuario-username">@{{ u.username }}</div>
+                </div>
+              </div>
+            </td>
+            <td style="font-size:0.82rem; color:var(--text-secondary);">
+              {% if u.email %}{{ u.email }}{% else %}<span style="color:var(--text-muted);">—</span>{% endif %}
+            </td>
+            <td style="font-size:0.82rem; color:var(--text-secondary);">
+              {% with grupo=u.groups.all|first %}
+                {% if grupo %}{{ grupo.name }}{% else %}<span style="color:var(--text-muted);">Sin rol</span>{% endif %}
+              {% endwith %}
+            </td>
+            <td>
+              {% if u.is_staff %}
+                <span class="badge-admin">Admin</span>
+              {% else %}
+                <span style="color:var(--text-muted); font-size:0.8rem;">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if u.is_active %}
+                <span class="badge-activo">Activo</span>
+              {% else %}
+                <span class="badge-inactivo">Inactivo</span>
+              {% endif %}
+            </td>
+            <td style="text-align:right;">
+              {% if u.id != request.user.id %}
+              <form method="post" action="{% url 'toggle_usuario' u.id %}" class="toggle-form">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-ghost btn-sm">
+                  {% if u.is_active %}Desactivar{% else %}Activar{% endif %}
+                </button>
+              </form>
+              {% else %}
+              <span style="font-size:0.78rem; color:var(--text-muted); padding-right:4px;">Tú</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6">
+              <div class="empty-state">
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+                  <circle cx="12" cy="8" r="4"/>
+                  <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+                </svg>
+                <p>No hay usuarios registrados</p>
+                <p style="margin-top:4px; font-size:0.78rem; color:var(--text-muted);">Crea el primer usuario con el botón de arriba</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Modal nuevo usuario -->
+  <div id="modal-usuario" class="modal-overlay" style="display:none;" onclick="if(event.target===this)cerrarModal()">
+    <div class="modal-card">
+      <div class="modal-head">
+        <span class="modal-titulo">Nuevo usuario</span>
+        <button class="modal-cerrar" onclick="cerrarModal()" type="button">&#x2715;</button>
+      </div>
+      <form method="post" action="{% url 'crear_usuario' %}">
+        {% csrf_token %}
+        <div class="modal-body">
+
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="id_first_name">Nombre</label>
+              <input type="text" id="id_first_name" name="first_name" placeholder="Ej: Ana">
+            </div>
+            <div class="form-group">
+              <label for="id_last_name">Apellido</label>
+              <input type="text" id="id_last_name" name="last_name" placeholder="Ej: González">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="id_username">Nombre de usuario</label>
+            <input type="text" id="id_username" name="username" required placeholder="Ej: ana.gonzalez"
+                   autocomplete="username">
+          </div>
+
+          <div class="form-group">
+            <label for="id_email">Correo electrónico</label>
+            <input type="email" id="id_email" name="email" placeholder="correo@ejemplo.com"
+                   autocomplete="email">
+          </div>
+
+          <div class="form-group">
+            <label for="id_password">Contraseña</label>
+            <input type="password" id="id_password" name="password" required placeholder="Contraseña segura"
+                   autocomplete="new-password">
+          </div>
+
+          <div class="form-group">
+            <label for="id_grupo">Rol</label>
+            <select id="id_grupo" name="grupo">
+              <option value="">Sin rol</option>
+              {% for g in grupos %}
+              <option value="{{ g.id }}">{{ g.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; font-weight:400;">
+              <input type="checkbox" name="is_staff" id="id_is_staff">
+              <span>Administrador del sistema <span style="color:var(--text-muted); font-size:0.78rem;">(acceso total)</span></span>
+            </label>
+          </div>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" onclick="cerrarModal()">Cancelar</button>
+          <button type="submit" class="btn btn-primary">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Crear usuario
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function abrirModal() {
+  document.getElementById('modal-usuario').style.display = 'flex';
+}
+function cerrarModal() {
+  document.getElementById('modal-usuario').style.display = 'none';
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') cerrarModal();
+});
+</script>
+{% endblock %}

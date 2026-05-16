@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Software Clínica{% endblock %} — Pönd</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=Fraunces:opsz,wght@9..144,300;9..144,400&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --sidebar-w: 248px;
+      --bg-sidebar: #1e2845;
+      --bg-main: #f5f2ec;
+      --bg-card: #ffffff;
+      --accent: #4ea17f;
+      --accent-light: #e6f4ee;
+      --accent-hover: #3d8468;
+      --text-primary: #1c2433;
+      --text-secondary: #5f7285;
+      --text-muted: #9daab8;
+      --text-sidebar: #b8c4d4;
+      --border: #ece8e1;
+      --border-sidebar: rgba(255,255,255,0.08);
+      --radius: 14px;
+      --radius-sm: 10px;
+      --shadow: 0 1px 4px rgba(30,40,69,0.05), 0 4px 18px rgba(30,40,69,0.04);
+      --shadow-md: 0 6px 32px rgba(30,40,69,0.10);
+      --font-body: 'DM Sans', sans-serif;
+      --font-display: 'Fraunces', serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 15px; }
+    body {
+      font-family: var(--font-body);
+      background: var(--bg-main);
+      color: var(--text-primary);
+      display: flex;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-height: 100vh;
+      background: var(--bg-sidebar);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0; left: 0;
+      z-index: 100;
+    }
+    .sidebar-logo {
+      padding: 30px 24px 22px;
+      border-bottom: 1px solid var(--border-sidebar);
+    }
+    .empresa-nombre {
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      font-weight: 300;
+      color: #ffffff;
+      letter-spacing: 0.01em;
+      line-height: 1.2;
+    }
+    .empresa-sucursal {
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.38);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+    .pond-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 14px;
+      font-size: 0.62rem;
+      color: rgba(255,255,255,0.18);
+      letter-spacing: 0.06em;
+    }
+    .pond-dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--accent);
+      opacity: 0.55;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 18px 0;
+      overflow-y: auto;
+    }
+    .nav-group { margin-bottom: 4px; }
+    .nav-group-label {
+      font-size: 0.6rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.18);
+      padding: 12px 24px 5px;
+      font-weight: 500;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 20px;
+      margin: 1px 10px;
+      border-radius: var(--radius-sm);
+      color: var(--text-sidebar);
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 400;
+      transition: background 0.15s, color 0.15s;
+    }
+    .nav-item:hover { background: rgba(255,255,255,0.07); color: #fff; }
+    .nav-item.active { background: rgba(78,161,127,0.16); color: #fff; font-weight: 500; }
+    .nav-item.active .nav-icon { opacity: 1; color: var(--accent); }
+    .nav-icon { width: 16px; height: 16px; opacity: 0.42; flex-shrink: 0; transition: opacity 0.15s; }
+    .nav-item:hover .nav-icon { opacity: 0.75; }
+    .nav-badge {
+      margin-left: auto;
+      background: #d9514e;
+      color: #fff;
+      font-size: 0.62rem;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 20px;
+      min-width: 20px;
+      text-align: center;
+    }
+    .nav-badge.verde { background: var(--accent); }
+
+    .sidebar-footer {
+      padding: 14px;
+      border-top: 1px solid var(--border-sidebar);
+    }
+    .user-pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background 0.15s;
+      text-decoration: none;
+    }
+    .user-pill:hover { background: rgba(255,255,255,0.07); }
+    .user-avatar {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent) 0%, #3d8468 100%);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: #fff;
+      flex-shrink: 0;
+      letter-spacing: 0.03em;
+    }
+    .user-name { font-size: 0.82rem; color: #fff; font-weight: 500; }
+    .user-role { font-size: 0.67rem; color: rgba(255,255,255,0.38); margin-top: 1px; }
+
+    /* ── Main ── */
+    .main-wrap {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    .topbar {
+      height: 62px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 30px;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .topbar-title { font-size: 1rem; font-weight: 500; color: var(--text-primary); }
+    .topbar-subtitle { font-size: 0.76rem; color: var(--text-muted); margin-top: 1px; }
+    .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+    /* ── Botones ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 18px;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-body);
+      font-size: 0.82rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: all 0.18s ease;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(78,161,127,0.22);
+    }
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      box-shadow: 0 4px 14px rgba(78,161,127,0.30);
+      transform: translateY(-1px);
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover {
+      background: var(--bg-main);
+      color: var(--text-primary);
+      border-color: #ddd8cf;
+    }
+    .btn-danger {
+      background: #fce8e8;
+      color: #a82828;
+      border: 1px solid #f5d0d0;
+    }
+    .btn-danger:hover { background: #f9d5d5; }
+    .btn-sm { padding: 5px 12px; font-size: 0.78rem; }
+    .btn-success {
+      background: var(--accent-light);
+      color: var(--accent-hover);
+      border: 1px solid #c8e8d8;
+    }
+    .btn-success:hover { background: #d4eddf; }
+
+    /* ── Contenido ── */
+    .page-content { padding: 28px 32px; flex: 1; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+    }
+    .card-header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .card-title { font-size: 0.92rem; font-weight: 500; color: var(--text-primary); }
+    .card-body { padding: 24px; }
+
+    /* ── Stat Cards ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px 24px;
+      box-shadow: var(--shadow);
+      transition: all 0.2s ease;
+    }
+    .stat-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+    .stat-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .stat-label {
+      font-size: 0.69rem;
+      font-weight: 500;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .stat-icon {
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .si-blue   { background: #eef2fc; color: #5b8dd9; }
+    .si-amber  { background: #fef5ea; color: #d4810c; }
+    .si-green  { background: var(--accent-light); color: var(--accent); }
+    .si-rose   { background: #fde8f0; color: #c4446a; }
+    .stat-value {
+      font-family: var(--font-display);
+      font-size: 2.3rem;
+      font-weight: 300;
+      color: var(--text-primary);
+      line-height: 1;
+      margin-bottom: 8px;
+      letter-spacing: -0.01em;
+    }
+    .stat-meta { font-size: 0.77rem; color: var(--text-secondary); line-height: 1.4; }
+    .stat-accent { color: var(--accent); font-weight: 500; }
+    .stat-red { color: #c4446a; font-weight: 500; }
+    .stat-amber-text { color: #d4810c; font-weight: 500; }
+
+    /* ── Badges ── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.7rem;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .badge-reservado    { background: #eef3fb; color: #3b6fbf; }
+    .badge-confirmado   { background: #e8f5ee; color: #2d7d56; }
+    .badge-en_espera    { background: #fef5e7; color: #9d6c00; }
+    .badge-asistio      { background: #e8f5ee; color: #2d7d56; }
+    .badge-no_asistio   { background: #fce8e8; color: #a82828; }
+    .badge-cancelada    { background: #f4f4f4; color: #787878; }
+    .badge-pendiente    { background: #fff2e8; color: #9d4a00; }
+    .badge-reprogramada { background: #f0eef9; color: #6b54b0; }
+    .badge-pagado       { background: #e8f5ee; color: #2d7d56; }
+    .badge-abonado      { background: #fef5e7; color: #9d6c00; }
+    .badge-sin_pago     { background: #f5f5f5; color: #888; }
+    .badge-contactado   { background: #eef3fb; color: #3b6fbf; }
+    .badge-agendado     { background: #e8f5ee; color: #2d7d56; }
+    .badge-descartado   { background: #f4f4f4; color: #787878; }
+    .badge-vencido      { background: #fce8e8; color: #a82828; }
+
+    /* ── Tabla ── */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    thead th {
+      text-align: left;
+      padding: 11px 16px;
+      font-size: 0.67rem;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 500;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    tbody tr { transition: background 0.12s; }
+    tbody tr:hover { background: #fafaf8; }
+    tbody td {
+      padding: 13px 16px;
+      border-bottom: 1px solid rgba(0,0,0,0.04);
+      color: var(--text-primary);
+      vertical-align: middle;
+    }
+    tbody tr:last-child td { border-bottom: none; }
+
+    /* ── Formularios ── */
+    .form-group { margin-bottom: 18px; }
+    label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+    input[type="text"], input[type="email"], input[type="date"],
+    input[type="time"], input[type="number"], input[type="search"],
+    input[type="password"], select, textarea {
+      width: 100%;
+      padding: 9px 13px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: var(--font-body);
+      font-size: 0.875rem;
+      color: var(--text-primary);
+      background: var(--bg-card);
+      transition: border-color 0.15s, box-shadow 0.15s;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(78,161,127,0.12);
+    }
+    textarea { resize: vertical; min-height: 80px; }
+
+    /* ── Helpers ── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; }
+
+    .pac-avatar {
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      background: var(--accent-light);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+    .pac-info { display: flex; align-items: center; gap: 10px; }
+    .pac-nombre { font-weight: 500; font-size: 0.875rem; }
+    .pac-rut { font-size: 0.73rem; color: var(--text-muted); margin-top: 1px; }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center;
+      padding: 56px 24px;
+    }
+    .empty-state svg { opacity: 0.18; margin-bottom: 14px; }
+    .empty-state p { font-size: 0.875rem; color: var(--text-muted); }
+
+    /* ── Mensajes ── */
+    .messages-wrap {
+      position: fixed;
+      top: 72px; right: 24px;
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: 340px;
+    }
+    .message {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 13px 18px;
+      font-size: 0.83rem;
+      box-shadow: var(--shadow-md);
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      animation: slide-in 0.25s ease;
+      line-height: 1.4;
+    }
+    .message.success { border-left: 3px solid var(--accent); }
+    .message.error   { border-left: 3px solid #e05252; }
+    .message.warning { border-left: 3px solid #d97706; }
+    .message.info    { border-left: 3px solid #5b8dd9; }
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateX(20px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    /* ── Separador ── */
+    .divider { height: 1px; background: var(--border); margin: 18px 0; }
+
+    /* ── Tag section ── */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .section-title {
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      :root { --sidebar-w: 220px; }
+    }
+    @media (max-width: 768px) {
+      .sidebar { transform: translateX(-100%); transition: transform 0.25s; }
+      .sidebar.open { transform: translateX(0); }
+      .main-wrap { margin-left: 0; }
+      .page-content { padding: 20px 16px; }
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+  </style>
+
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="empresa-nombre">Clínica</div>
+      <div class="empresa-sucursal">Panel de gestión</div>
+      <div class="pond-badge">
+        <span class="pond-dot"></span>
+        Gestionado por Pönd SpA
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+
+      <div class="nav-group">
+        <div class="nav-group-label">Principal</div>
+        <a href="{% url 'dashboard' %}" class="nav-item {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+            <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+          </svg>
+          Dashboard
+        </a>
+        <a href="{% url 'agenda' %}" class="nav-item {% if request.resolver_match.url_name == 'agenda' %}active{% endif %}">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="3" y="4" width="18" height="18" rx="2"/>
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+          Agenda
+        </a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-label">Pacientes</div>
+        <a href="{% url 'seguimientos' %}" class="nav-item {% if request.resolver_match.url_name == 'seguimientos' %}active{% endif %}">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+          Seguimientos
+          {% if global_seguimientos_vencidos %}
+            <span class="nav-badge">{{ global_seguimientos_vencidos }}</span>
+          {% elif global_seguimientos_pendientes %}
+            <span class="nav-badge verde">{{ global_seguimientos_pendientes }}</span>
+          {% endif %}
+        </a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-label">Configuración</div>
+        <a href="{% url 'horarios' %}" class="nav-item {% if request.resolver_match.url_name == 'horarios' or request.resolver_match.url_name == 'guardar_horarios' %}active{% endif %}">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          Horarios
+        </a>
+        <a href="{% url 'servicios' %}" class="nav-item {% if request.resolver_match.url_name == 'servicios' %}active{% endif %}">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+            <rect x="9" y="3" width="6" height="4" rx="1"/>
+            <line x1="9" y1="12" x2="15" y2="12"/>
+            <line x1="9" y1="16" x2="13" y2="16"/>
+          </svg>
+          Servicios
+        </a>
+        {% if request.user.is_staff %}
+        <a href="{% url 'usuarios' %}" class="nav-item {% if request.resolver_match.url_name == 'usuarios' %}active{% endif %}">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            <path d="M21 21v-2a4 4 0 0 0-3-3.85"/>
+          </svg>
+          Usuarios
+        </a>
+        {% endif %}
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-label">Sistema</div>
+        <a href="/admin/" class="nav-item" target="_blank">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          Administración
+        </a>
+      </div>
+
+    </nav>
+
+    <div class="sidebar-footer">
+      <a href="{% url 'logout' %}" class="user-pill">
+        <div class="user-avatar">
+          {{ request.user.first_name|slice:":1"|upper }}{{ request.user.last_name|slice:":1"|upper }}
+        </div>
+        <div>
+          <div class="user-name">{{ request.user.get_full_name|default:request.user.username }}</div>
+          <div class="user-role">{{ request.user.groups.first.name|default:"Usuario" }} · Cerrar sesión</div>
+        </div>
+      </a>
+    </div>
+  </aside>
+
+  <div class="main-wrap">
+
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">{% block page_title %}Dashboard{% endblock %}</div>
+        <div class="topbar-subtitle">{% block page_subtitle %}{% endblock %}</div>
+      </div>
+      <div class="topbar-right">
+        {% block topbar_actions %}{% endblock %}
+      </div>
+    </header>
+
+    {% if messages %}
+    <div class="messages-wrap">
+      {% for message in messages %}
+      <div class="message {{ message.tags }}">
+        <span style="flex:1;">{{ message }}</span>
+        <button onclick="this.parentElement.remove()"
+                style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.1rem;line-height:1;flex-shrink:0;margin-left:4px;">&times;</button>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <main class="page-content">
+      {% block content %}{% endblock %}
+    </main>
+
+  </div>
+
+  <script>
+    setTimeout(() => {
+      document.querySelectorAll('.message').forEach(m => {
+        m.style.opacity = '0';
+        m.style.transition = 'opacity 0.4s';
+        setTimeout(() => m.remove(), 400);
+      });
+    }, 5000);
+  </script>
+
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

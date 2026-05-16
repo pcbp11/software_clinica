@@ -1,0 +1,310 @@
+{% extends "core/base.html" %}
+{% load clinica_tags %}
+
+{% block title %}Horarios profesionales{% endblock %}
+{% block page_title %}Horarios profesionales{% endblock %}
+{% block page_subtitle %}Configurar días y horarios de atención{% endblock %}
+
+{% block extra_head %}
+<style>
+  .prof-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .prof-avatar-lg {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: var(--accent-light);
+    color: var(--accent);
+    font-size: 0.95rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .prof-nombre {
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+  }
+  .prof-sub {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .horarios-table td {
+    vertical-align: middle;
+    padding: 8px 10px;
+    font-size: 0.83rem;
+  }
+  .horarios-table thead th {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    padding: 6px 10px;
+  }
+  .dia-nombre {
+    font-weight: 500;
+    color: var(--text-primary);
+    min-width: 90px;
+  }
+  .hora-row.inactiva td:not(.td-activo) {
+    opacity: 0.35;
+    pointer-events: none;
+  }
+  .hora-row.inactiva .td-activo {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .td-activo {
+    width: 60px;
+    text-align: center;
+  }
+  .td-horas {
+    white-space: nowrap;
+  }
+  .td-pausa {
+    width: 70px;
+    text-align: center;
+  }
+  .td-pausa-horas {
+    white-space: nowrap;
+  }
+  .hora-sep {
+    color: var(--text-muted);
+    margin: 0 6px;
+    font-size: 0.8rem;
+  }
+  input[type="time"] {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 8px;
+    font-size: 0.82rem;
+    color: var(--text-primary);
+    background: var(--bg-main);
+    outline: none;
+    width: 108px;
+    transition: border-color 0.15s;
+  }
+  input[type="time"]:focus {
+    border-color: var(--accent);
+    background: #fff;
+  }
+  input[type="time"]:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .descanso-campos.oculto input {
+    opacity: 0.35;
+    pointer-events: none;
+  }
+  .pausa-check-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    user-select: none;
+  }
+  .prof-card {
+    margin-bottom: 28px;
+  }
+  .prof-card .card-header {
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+  }
+  .form-save-row {
+    padding: 14px 18px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    background: var(--bg-main);
+    border-radius: 0 0 14px 14px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if not profesionales_data %}
+  <div class="card">
+    <div class="card-body">
+      <div class="empty-state">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+          <circle cx="12" cy="8" r="4"/>
+          <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+        </svg>
+        <p>No hay profesionales activos</p>
+        <p style="margin-top:4px; font-size:0.78rem; color:var(--text-muted);">Agrega profesionales desde el administrador</p>
+      </div>
+    </div>
+  </div>
+{% else %}
+
+  {% for item in profesionales_data %}
+  <div class="card prof-card">
+    <div class="card-header">
+      <div class="prof-header">
+        <div class="prof-avatar-lg">
+          {{ item.profesional.nombres|slice:":1" }}{{ item.profesional.apellidos|slice:":1" }}
+        </div>
+        <div>
+          <div class="prof-nombre">{{ item.profesional.nombres }} {{ item.profesional.apellidos }}</div>
+          <div class="prof-sub">
+            {% if item.profesional.nombre_publico %}{{ item.profesional.nombre_publico }}{% else %}Profesional{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <form method="post" action="{% url 'guardar_horarios' item.profesional.id %}">
+      {% csrf_token %}
+      <div class="table-wrap" style="overflow-x:auto;">
+        <table class="horarios-table" style="width:100%; border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th>Día</th>
+              <th style="text-align:center;">Activo</th>
+              <th>Horario de atención</th>
+              <th style="text-align:center;">Pausa</th>
+              <th>Horario de pausa</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for horario in item.horarios %}
+            <tr id="row-{{ item.profesional.id }}-{{ horario.dia_num }}"
+                class="hora-row {% if not horario.h or not horario.h.activo %}inactiva{% endif %}">
+
+              <td class="dia-nombre">{{ horario.dia_nombre }}</td>
+
+              <td class="td-activo">
+                <input
+                  type="checkbox"
+                  name="activo_{{ horario.dia_num }}"
+                  id="activo-{{ item.profesional.id }}-{{ horario.dia_num }}"
+                  {% if horario.h and horario.h.activo %}checked{% endif %}
+                  onchange="toggleActivo({{ item.profesional.id }}, {{ horario.dia_num }}, this)"
+                >
+              </td>
+
+              <td class="td-horas">
+                <input
+                  type="time"
+                  name="hora_inicio_{{ horario.dia_num }}"
+                  id="inicio-{{ item.profesional.id }}-{{ horario.dia_num }}"
+                  value="{% if horario.h and horario.h.hora_inicio %}{{ horario.h.hora_inicio|time:'H:i' }}{% else %}09:00{% endif %}"
+                  {% if not horario.h or not horario.h.activo %}disabled{% endif %}
+                >
+                <span class="hora-sep">→</span>
+                <input
+                  type="time"
+                  name="hora_fin_{{ horario.dia_num }}"
+                  id="fin-{{ item.profesional.id }}-{{ horario.dia_num }}"
+                  value="{% if horario.h and horario.h.hora_fin %}{{ horario.h.hora_fin|time:'H:i' }}{% else %}18:00{% endif %}"
+                  {% if not horario.h or not horario.h.activo %}disabled{% endif %}
+                >
+              </td>
+
+              <td class="td-pausa">
+                <label class="pausa-check-label">
+                  <input
+                    type="checkbox"
+                    name="tiene_descanso_{{ horario.dia_num }}"
+                    id="pausa-{{ item.profesional.id }}-{{ horario.dia_num }}"
+                    {% if horario.h and horario.h.tiene_descanso %}checked{% endif %}
+                    {% if not horario.h or not horario.h.activo %}disabled{% endif %}
+                    onchange="toggleDescanso({{ item.profesional.id }}, {{ horario.dia_num }}, this)"
+                  >
+                  Pausa
+                </label>
+              </td>
+
+              <td class="td-pausa-horas">
+                <span class="descanso-campos {% if not horario.h or not horario.h.tiene_descanso %}oculto{% endif %}"
+                      id="descampos-{{ item.profesional.id }}-{{ horario.dia_num }}">
+                  <input
+                    type="time"
+                    name="inicio_descanso_{{ horario.dia_num }}"
+                    id="descinicio-{{ item.profesional.id }}-{{ horario.dia_num }}"
+                    value="{% if horario.h and horario.h.inicio_descanso %}{{ horario.h.inicio_descanso|time:'H:i' }}{% else %}13:00{% endif %}"
+                    {% if not horario.h or not horario.h.activo or not horario.h.tiene_descanso %}disabled{% endif %}
+                  >
+                  <span class="hora-sep">→</span>
+                  <input
+                    type="time"
+                    name="fin_descanso_{{ horario.dia_num }}"
+                    id="descfin-{{ item.profesional.id }}-{{ horario.dia_num }}"
+                    value="{% if horario.h and horario.h.fin_descanso %}{{ horario.h.fin_descanso|time:'H:i' }}{% else %}14:00{% endif %}"
+                    {% if not horario.h or not horario.h.activo or not horario.h.tiene_descanso %}disabled{% endif %}
+                  >
+                </span>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="form-save-row">
+        <button type="submit" class="btn btn-primary btn-sm">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Guardar horarios
+        </button>
+      </div>
+    </form>
+  </div>
+  {% endfor %}
+
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleActivo(profId, diaNum, cb) {
+  var row = document.getElementById('row-' + profId + '-' + diaNum);
+  var pausaCheck = document.getElementById('pausa-' + profId + '-' + diaNum);
+  var inputs = row.querySelectorAll('input[type="time"]');
+
+  if (cb.checked) {
+    row.classList.remove('inactiva');
+    inputs.forEach(function(inp) { inp.disabled = false; });
+    if (pausaCheck) pausaCheck.disabled = false;
+    // restore pausa horas state based on current pausa checkbox
+    toggleDescanso(profId, diaNum, pausaCheck);
+  } else {
+    row.classList.add('inactiva');
+    inputs.forEach(function(inp) { inp.disabled = true; });
+    if (pausaCheck) {
+      pausaCheck.disabled = true;
+      // visually disable pausa fields too
+      var descampos = document.getElementById('descampos-' + profId + '-' + diaNum);
+      if (descampos) {
+        descampos.querySelectorAll('input[type="time"]').forEach(function(inp) {
+          inp.disabled = true;
+        });
+      }
+    }
+  }
+}
+
+function toggleDescanso(profId, diaNum, cb) {
+  var descampos = document.getElementById('descampos-' + profId + '-' + diaNum);
+  if (!descampos) return;
+  var timeInputs = descampos.querySelectorAll('input[type="time"]');
+
+  if (cb && cb.checked) {
+    descampos.classList.remove('oculto');
+    timeInputs.forEach(function(inp) { inp.disabled = false; });
+  } else {
+    descampos.classList.add('oculto');
+    timeInputs.forEach(function(inp) { inp.disabled = true; });
+  }
+}
+</script>
+{% endblock %}

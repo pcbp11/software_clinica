@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Iniciar sesión — Clínica</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500&family=Fraunces:opsz,wght@9..144,300;9..144,400&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 15px; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(145deg, #f0ede5 0%, #e8f2ee 55%, #f0ede5 100%);
+      color: #1c2433;
+      -webkit-font-smoothing: antialiased;
+      padding: 24px;
+    }
+
+    .login-wrap {
+      width: 100%;
+      max-width: 380px;
+    }
+
+    .login-brand {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .login-brand .brand-icon {
+      width: 52px; height: 52px;
+      background: #4ea17f;
+      border-radius: 14px;
+      display: inline-flex; align-items: center; justify-content: center;
+      margin-bottom: 14px;
+      box-shadow: 0 4px 16px rgba(78,161,127,0.28);
+    }
+    .login-brand h1 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.6rem;
+      font-weight: 300;
+      color: #1c2433;
+      letter-spacing: 0.01em;
+    }
+    .login-brand p {
+      font-size: 0.82rem;
+      color: #9daab8;
+      margin-top: 4px;
+    }
+
+    .login-card {
+      background: #fff;
+      border-radius: 16px;
+      border: 1px solid #ece8e1;
+      box-shadow: 0 4px 24px rgba(30,40,69,0.08), 0 1px 4px rgba(30,40,69,0.04);
+      padding: 34px 32px 30px;
+    }
+
+    .form-group { margin-bottom: 18px; }
+    .form-group label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: #5f7285;
+      margin-bottom: 6px;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid #ece8e1;
+      border-radius: 10px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.9rem;
+      color: #1c2433;
+      background: #fff;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    .form-group input:focus {
+      border-color: #4ea17f;
+      box-shadow: 0 0 0 3px rgba(78,161,127,0.12);
+    }
+
+    .btn-login {
+      width: 100%;
+      padding: 11px;
+      background: #4ea17f;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      margin-top: 8px;
+      box-shadow: 0 3px 10px rgba(78,161,127,0.25);
+    }
+    .btn-login:hover {
+      background: #3d8468;
+      box-shadow: 0 4px 14px rgba(78,161,127,0.32);
+      transform: translateY(-1px);
+    }
+    .btn-login:active { transform: translateY(0); }
+
+    .login-errors {
+      background: #fce8e8;
+      border: 1px solid #f5d0d0;
+      border-radius: 10px;
+      padding: 11px 14px;
+      margin-bottom: 18px;
+      font-size: 0.82rem;
+      color: #a82828;
+      line-height: 1.5;
+    }
+    .login-errors ul { padding-left: 0; list-style: none; }
+
+    .login-footer {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 0.7rem;
+      color: #c4ccd8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .login-footer .dot {
+      width: 4px; height: 4px;
+      border-radius: 50%;
+      background: #4ea17f;
+      opacity: 0.5;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="login-wrap">
+
+    <div class="login-brand">
+      <div class="brand-icon">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8">
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+        </svg>
+      </div>
+      <h1>Clínica</h1>
+      <p>Gestión integral de pacientes y agenda</p>
+    </div>
+
+    <div class="login-card">
+
+      {% if form.errors %}
+      <div class="login-errors">
+        Usuario o contraseña incorrectos. Vuelve a intentarlo.
+      </div>
+      {% endif %}
+
+      <form method="post">
+        {% csrf_token %}
+
+        <div class="form-group">
+          <label for="id_username">Usuario</label>
+          <input
+            type="text"
+            id="id_username"
+            name="username"
+            autocomplete="username"
+            placeholder="usuario@clinica.cl"
+            autofocus
+            value="{{ form.username.value|default:'' }}"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="id_password">Contraseña</label>
+          <input
+            type="password"
+            id="id_password"
+            name="password"
+            autocomplete="current-password"
+            placeholder="••••••••"
+          >
+        </div>
+
+        <button type="submit" class="btn-login">Iniciar sesión</button>
+      </form>
+
+    </div>
+
+    <div class="login-footer">
+      <span class="dot"></span>
+      Gestionado por Pönd SpA
+    </div>
+
+  </div>
+
+</body>
+</html>
