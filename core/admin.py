@@ -14,6 +14,10 @@ from .models import (
     Pago,
     SeguimientoPaciente,
     Descuento,
+    Insumo,
+    ServicioInsumo,
+    EstructuraComision,
+    ComisionCalculada,
 )
 from .utils import obtener_horas_disponibles
 
@@ -141,7 +145,25 @@ class ProfesionalAdmin(admin.ModelAdmin):
         'activo',
     )
     search_fields = ('nombres', 'apellidos', 'rut', 'nombre_publico')
+    readonly_fields = ('unidad_negocio_display',)
     inlines = [HorarioProfesionalInline]
+
+    fields = (
+        'rut', 'nombres', 'apellidos', 'nombre_publico', 'email', 'telefono',
+        'empresa', 'sucursal_principal', 'unidad_negocio_display',
+        'biografia', 'certificado_salud', 'foto',
+        'acepta_reservas_online', 'activo'
+    )
+
+    def unidad_negocio_display(self, obj):
+        """Muestra la Unidad de Negocio de las estructuras de comisión del profesional"""
+        if obj.pk:  # Solo si el objeto ya existe
+            estructuras = obj.estructuras_comision.filter(activa=True).values_list('unidad_negocio__nombre', flat=True).distinct()
+            if estructuras:
+                return ' • '.join(estructuras)
+        return '—'
+
+    unidad_negocio_display.short_description = 'Unidad(es) de Negocio'
 
 
 @admin.register(HorarioProfesional)
@@ -391,3 +413,161 @@ class DescuentoAdmin(admin.ModelAdmin):
         'razon',
     )
     readonly_fields = ('fecha_solicitud', 'fecha_autorizacion', 'solicitado_por')
+
+
+# ── COMMISSION SYSTEM ADMIN ────────────────────────────────────────────────────
+
+@admin.register(Insumo)
+class InsumoAdmin(admin.ModelAdmin):
+    list_display = (
+        'nombre',
+        'codigo_sku',
+        'unidad_negocio',
+        'costo_unitario',
+        'precio_venta',
+        'margen',
+        'cantidad_disponible',
+        'activo',
+    )
+    list_filter = ('unidad_negocio', 'activo', 'unidad')
+    search_fields = ('nombre', 'codigo_sku', 'descripcion')
+    fieldsets = (
+        ('Información básica', {
+            'fields': (
+                'unidad_negocio',
+                'nombre',
+                'codigo_sku',
+                'descripcion',
+            )
+        }),
+        ('Precios e inventario', {
+            'fields': (
+                'costo_unitario',
+                'precio_venta',
+                'unidad',
+                'cantidad_disponible',
+            )
+        }),
+        ('Estado', {
+            'fields': (
+                'activo',
+            )
+        }),
+    )
+
+
+class ServicioInsumoInline(admin.TabularInline):
+    model = ServicioInsumo
+    extra = 1
+    fields = ('insumo', 'cantidad_usada')
+
+
+@admin.register(ServicioInsumo)
+class ServicioInsumoAdmin(admin.ModelAdmin):
+    list_display = ('servicio', 'insumo', 'cantidad_usada', 'costo_total')
+    list_filter = ('servicio__unidad_negocio', 'insumo__unidad_negocio')
+    search_fields = ('servicio__nombre', 'insumo__nombre')
+
+
+@admin.register(EstructuraComision)
+class EstructuraComisionAdmin(admin.ModelAdmin):
+    list_display = (
+        'profesional',
+        'unidad_negocio',
+        'categoria_servicio',
+        'tipo_tributo',
+        'valor_comision',
+        'vigente',
+        'activa',
+        'fecha_inicio',
+        'fecha_fin',
+    )
+    list_filter = ('unidad_negocio', 'categoria_servicio__unidad_negocio', 'tipo_tributo', 'activa')
+    search_fields = (
+        'profesional__nombres',
+        'profesional__apellidos',
+        'categoria_servicio__nombre',
+        'unidad_negocio__nombre',
+    )
+    fieldsets = (
+        ('Asignación', {
+            'fields': (
+                'profesional',
+                'unidad_negocio',
+                'categoria_servicio',
+            )
+        }),
+        ('Estructura de comisión', {
+            'fields': (
+                'tipo_tributo',
+                'valor_comision',
+            )
+        }),
+        ('Vigencia', {
+            'fields': (
+                'activa',
+                'fecha_inicio',
+                'fecha_fin',
+                'vigencia_indefinida',
+            )
+        }),
+        ('Notas', {
+            'fields': (
+                'notas',
+            )
+        }),
+    )
+
+
+@admin.register(ComisionCalculada)
+class ComisionCalculadaAdmin(admin.ModelAdmin):
+    list_display = (
+        'profesional',
+        'mes_referencia',
+        'monto_neto',
+        'monto_comision',
+        'porcentaje_comision',
+        'fecha_calculo',
+    )
+    list_filter = ('mes_referencia', 'profesional', 'fecha_calculo')
+    search_fields = (
+        'profesional__nombres',
+        'profesional__apellidos',
+        'mes_referencia',
+    )
+    readonly_fields = (
+        'fecha_calculo',
+        'actualizado_en',
+        'monto_neto',
+        'monto_comision',
+    )
+    fieldsets = (
+        ('Profesional y período', {
+            'fields': (
+                'profesional',
+                'mes_referencia',
+            )
+        }),
+        ('Cálculo de comisión', {
+            'fields': (
+                'estructura_comision',
+                'cita',
+            )
+        }),
+        ('Montos', {
+            'fields': (
+                'monto_ingresos_brutos',
+                'monto_insumos',
+                'monto_descuentos',
+                'monto_neto',
+                'monto_comision',
+                'porcentaje_comision',
+            )
+        }),
+        ('Auditoría', {
+            'fields': (
+                'fecha_calculo',
+                'actualizado_en',
+            )
+        }),
+    )

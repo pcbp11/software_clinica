@@ -33,6 +33,7 @@ LOGOUT_REDIRECT_URL = '/login/'
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.locale.LocaleMiddleware',  # ← Fuerza idioma español
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -101,9 +102,20 @@ AUTH_PASSWORD_VALIDATORS = [
 # 🌍 Idioma / zona
 LANGUAGE_CODE = 'es-cl'
 
+LANGUAGES = [
+    ('es-cl', 'Español (Chile)'),
+    ('es', 'Español'),
+]
+
+LOCALE_PATHS = [
+    BASE_DIR / 'locale',
+]
+
 TIME_ZONE = 'America/Santiago'
 
 USE_I18N = True
+
+USE_L10N = True  # ← Usa formato local para números/fechas
 
 USE_TZ = True
 

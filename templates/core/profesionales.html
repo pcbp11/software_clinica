@@ -112,12 +112,17 @@
           <div class="prof-nombre">{{ p.nombre_publico|default:p.nombres }}</div>
           <div class="prof-rut">{{ p.rut }}</div>
         </div>
-        <div style="font-size:0.82rem; color:var(--text-secondary); min-width:140px; text-align:right;">
+        <div style="font-size:0.82rem; color:var(--text-secondary); min-width:160px; text-align:right;">
           {% if p.telefono %}
           <div>{{ p.telefono }}</div>
           {% endif %}
           {% if p.sucursal_principal %}
-          <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">{{ p.sucursal_principal.nombre }}</div>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">{{ p.sucursal_principal.nombre }}</div>
+          {% endif %}
+          {% if p.unidad_negocio_display %}
+          <div style="font-size:0.73rem; color:var(--accent); margin-top:8px; font-weight:500; padding:4px 6px; background:rgba(61, 132, 104, 0.08); border-radius:4px; display:inline-block;">
+            📊 {{ p.unidad_negocio_display }}
+          </div>
           {% endif %}
         </div>
         <div style="text-align:center; min-width:100px;">

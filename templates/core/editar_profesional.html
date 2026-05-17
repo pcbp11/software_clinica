@@ -103,6 +103,40 @@
     padding-top: 16px;
     border-top: 1px solid var(--border);
   }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .form-group label {
+    font-size: 0.84rem;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+  .form-group input[type="text"],
+  .form-group input[type="tel"],
+  .form-group input[type="date"] {
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.84rem;
+    color: var(--text-primary);
+    background: var(--bg-card);
+    transition: border-color 0.15s;
+  }
+  .form-group input[type="text"]:focus,
+  .form-group input[type="tel"]:focus,
+  .form-group input[type="date"]:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-light);
+  }
 </style>
 {% endblock %}
 
@@ -131,14 +165,22 @@
         <input type="text" id="id_nombre_publico" name="nombre_publico" value="{{ profesional.nombre_publico }}" placeholder="Ej: Dra. María González">
       </div>
 
-      <div class="form-group">
-        <label for="id_telefono">Teléfono</label>
-        <input type="tel" id="id_telefono" name="telefono" value="{{ profesional.telefono }}" placeholder="+56912345678">
+      <div class="grid-2">
+        <div class="form-group">
+          <label for="id_rut">RUT</label>
+          <input type="text" id="id_rut" name="rut" value="{{ profesional.rut }}" placeholder="Ej: 12.345.678-9">
+        </div>
+        <div class="form-group">
+          <label for="id_telefono">Teléfono</label>
+          <input type="tel" id="id_telefono" name="telefono" value="{{ profesional.telefono }}" placeholder="+56912345678">
+        </div>
       </div>
 
-      <div class="form-group">
-        <label>RUT</label>
-        <input type="text" value="{{ profesional.rut }}" disabled style="background:#f5f5f5;">
+      <div class="grid-2">
+        <div class="form-group">
+          <label for="id_fecha_nacimiento">Fecha de nacimiento</label>
+          <input type="date" id="id_fecha_nacimiento" name="fecha_nacimiento" value="{% if profesional.fecha_nacimiento %}{{ profesional.fecha_nacimiento|date:'Y-m-d' }}{% endif %}">
+        </div>
       </div>
     </div>
 
@@ -217,6 +259,83 @@
       </table>
     </div>
 
+    <!-- Estructura de Comisión -->
+    <div class="form-section">
+      <div class="form-section-title" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>Estructura de Comisión</span>
+        <button type="button" class="btn btn-primary btn-sm" onclick="abrirModalComision()" style="margin: 0;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="display:inline; margin-right:4px;">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Agregar
+        </button>
+      </div>
+
+      {% if estructuras_comision %}
+      <table class="horarios-table" style="margin-top:12px;">
+        <thead>
+          <tr>
+            <th>Unidad de Negocio</th>
+            <th>Categoría de Servicio</th>
+            <th>Tributo</th>
+            <th>Comisión</th>
+            <th>Insumo</th>
+            <th>Vigente desde</th>
+            <th>Vigencia</th>
+            <th style="text-align:right;">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ec in estructuras_comision %}
+          <tr>
+            <td style="font-size:0.82rem; color:var(--text-muted);">{{ ec.unidad_negocio.nombre }}</td>
+            <td style="font-weight:500; color:var(--text-primary);">{{ ec.categoria_servicio.nombre }}</td>
+            <td style="font-size:0.82rem;">{{ ec.get_tipo_tributo_display }}</td>
+            <td style="font-weight:500;">{{ ec.valor_comision }}%</td>
+            <td style="font-size:0.82rem; text-align:center;">
+              {% if ec.incluye_insumo %}
+                <span style="color: var(--accent); font-weight: 600;">📦</span>
+              {% else %}
+                <span style="color: var(--text-muted);">—</span>
+              {% endif %}
+            </td>
+            <td style="font-size:0.82rem; color:var(--text-muted);">{{ ec.fecha_inicio|date:'d/m/Y' }}</td>
+            <td style="font-size:0.82rem; color:var(--text-muted);">
+              {% if ec.vigencia_indefinida %}
+                <span style="color: green; font-weight: 500;">∞ Indefinida</span>
+              {% else %}
+                {% if ec.fecha_fin %}
+                  Hasta {{ ec.fecha_fin|date:'d/m/Y' }}
+                {% else %}
+                  Sin límite
+                {% endif %}
+              {% endif %}
+            </td>
+            <td style="text-align:right;">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="abrirModalEditar({{ ec.id }}, '{{ ec.unidad_negocio.id }}', '{{ ec.categoria_servicio.id }}', '{{ ec.tipo_tributo }}', {{ ec.valor_comision }}, '{{ ec.fecha_inicio|date:'Y-m-d' }}', '{% if ec.fecha_fin %}{{ ec.fecha_fin|date:'Y-m-d' }}{% endif %}', {{ ec.vigencia_indefinida|lower }}, {{ ec.incluye_insumo|lower }})" title="Editar">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="display:inline; margin-right:4px;">
+                  <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L21 6Z"/>
+                </svg>
+              </button>
+              <button type="button" class="btn btn-ghost btn-sm" style="color:#ef4444;" onclick="eliminarEstructuraComision({{ ec.id }})" title="Eliminar">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="display:inline;">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color: var(--text-muted); font-size: 0.84rem; font-style: italic; margin-top:12px;">
+        No hay estructuras de comisión configuradas. Agrega una con el botón de arriba.
+      </p>
+      {% endif %}
+    </div>
+
     <!-- Usuario/Email -->
     <div class="form-section">
       <div class="form-section-title">Acceso a sistema</div>
@@ -247,6 +366,114 @@
       </button>
     </div>
   </form>
+
+  <!-- Modal Agregar/Editar Estructura de Comisión -->
+  <div id="modal-comision" class="modal-overlay" style="display:none;" onclick="if(event.target===this)cerrarModalComision()">
+    <div class="modal-card">
+      <div class="modal-head">
+        <span class="modal-titulo" id="modal-comision-titulo">Agregar Estructura de Comisión</span>
+        <button class="modal-cerrar" onclick="cerrarModalComision()" type="button">&#x2715;</button>
+      </div>
+      <form method="post" action="{% url 'crear_estructura_comision' profesional.id %}" id="form-comision">
+        {% csrf_token %}
+        <input type="hidden" id="estructura_id" name="estructura_id" value="">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="id_unidad_negocio">Unidad de Negocio</label>
+            <select id="id_unidad_negocio" name="unidad_negocio" required onchange="filtrarCategorias()">
+              <option value="">Seleccionar...</option>
+              {% for u in unidades %}
+              <option value="{{ u.id }}">{{ u.nombre }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="id_categoria_servicio">Categoría de Servicio</label>
+            <select id="id_categoria_servicio" name="categoria_servicio" required>
+              <option value="">Seleccionar unidad primero...</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="id_tipo_tributo">Tipo de Tributo</label>
+            <select id="id_tipo_tributo" name="tipo_tributo" required>
+              <option value="">Seleccionar...</option>
+              <option value="afecta">Afecta a IVA</option>
+              <option value="exenta">Exenta</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="id_valor_comision">Porcentaje de Comisión (%)</label>
+            <input type="number" id="id_valor_comision" name="valor_comision" min="0" max="100" step="1" required placeholder="60">
+          </div>
+
+          <div class="form-group">
+            <label for="id_fecha_inicio">Vigente desde</label>
+            <input type="date" id="id_fecha_inicio" name="fecha_inicio" required>
+          </div>
+
+          <div class="form-group">
+            <label for="id_fecha_fin">Vigente hasta</label>
+            <input type="date" id="id_fecha_fin" name="fecha_fin">
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-group">
+              <input type="checkbox" id="id_vigencia_indefinida" name="vigencia_indefinida" onchange="toggleVigenciaIndefinida()">
+              <span>Vigencia indefinida (sin fecha de fin)</span>
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-group">
+              <input type="checkbox" id="id_incluye_insumo" name="incluye_insumo">
+              <span>📦 Incluye insumo (descuenta costo en comisión)</span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" onclick="cerrarModalComision()">Cancelar</button>
+          <button type="submit" class="btn btn-primary">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="display:inline; margin-right:4px;">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Guardar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Estilos del Modal -->
+  <style>
+    .modal-overlay { position:fixed; inset:0; background:rgba(15,20,40,0.5); backdrop-filter:blur(5px); z-index:500; display:flex; align-items:center; justify-content:center; padding:20px; animation:mo-fade 0.18s ease; }
+    @keyframes mo-fade { from{opacity:0} to{opacity:1} }
+    .modal-card { background:#fff; border-radius:18px; box-shadow:0 24px 64px rgba(15,20,40,0.28); width:100%; max-width:450px; animation:mo-up 0.22s ease; overflow:hidden; max-height:95vh; display:flex; flex-direction:column; }
+    @keyframes mo-up { from{opacity:0;transform:translateY(18px) scale(0.97)} to{opacity:1;transform:translateY(0) scale(1)} }
+    .modal-head { padding:22px 24px 0; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+    .modal-titulo { font-size:1.05rem; font-weight:500; color:var(--text-primary); }
+    .modal-cerrar { width:30px; height:30px; border-radius:50%; border:none; background:var(--bg-main); cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:1.1rem; transition:all 0.15s; }
+    .modal-cerrar:hover { background:var(--border); color:var(--text-primary); }
+    .modal-body { padding:20px 24px; overflow-y:auto; flex:1; max-height:calc(95vh - 140px); }
+    .modal-body .form-group { margin-bottom:14px; }
+    .modal-footer { padding:16px 24px; border-top:1px solid var(--border); display:flex; gap:10px; justify-content:flex-end; flex-shrink:0; background:var(--bg-card); }
+    .modal-body select {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 0.84rem;
+      color: var(--text-primary);
+      background: var(--bg-card);
+    }
+    .modal-body select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-light);
+    }
+  </style>
 
 {% endblock %}
 
@@ -291,5 +518,118 @@ function toggleDescanso(dia) {
     finInput.disabled = true;
   }
 }
+
+// Data de categorías por unidad
+const categoriasData = {
+  {% for u in unidades %}
+  '{{ u.id }}': [
+    {% for c in categorias %}
+    {% if c.unidad_negocio.id == u.id %}
+    { id: '{{ c.id }}', nombre: '{{ c.nombre }}' },
+    {% endif %}
+    {% endfor %}
+  ],
+  {% endfor %}
+};
+
+function abrirModalComision() {
+  const modal = document.getElementById('modal-comision');
+  const titulo = document.getElementById('modal-comision-titulo');
+  const form = document.getElementById('form-comision');
+
+  titulo.textContent = 'Agregar Estructura de Comisión';
+  form.action = '{% url "crear_estructura_comision" profesional.id %}';
+  document.getElementById('estructura_id').value = '';
+  form.reset();
+  document.getElementById('id_unidad_negocio').value = '';
+  document.getElementById('id_vigencia_indefinida').checked = false;
+  document.getElementById('id_incluye_insumo').checked = false;
+  toggleVigenciaIndefinida();
+  filtrarCategorias();
+
+  modal.style.display = 'flex';
+}
+
+function abrirModalEditar(estructuraId, unidadId, categoriaId, tipoTributo, valorComision, fechaInicio, fechaFin, vigenciaIndefinida, incluyeInsumo) {
+  const modal = document.getElementById('modal-comision');
+  const titulo = document.getElementById('modal-comision-titulo');
+  const form = document.getElementById('form-comision');
+
+  titulo.textContent = 'Editar Estructura de Comisión';
+  document.getElementById('estructura_id').value = estructuraId;
+  form.action = '/profesionales/estructura/' + estructuraId + '/editar/';
+
+  document.getElementById('id_unidad_negocio').value = unidadId;
+  filtrarCategorias();
+  setTimeout(() => {
+    document.getElementById('id_categoria_servicio').value = categoriaId;
+  }, 100);
+  document.getElementById('id_tipo_tributo').value = tipoTributo;
+  document.getElementById('id_valor_comision').value = valorComision;
+  document.getElementById('id_fecha_inicio').value = fechaInicio;
+  document.getElementById('id_fecha_fin').value = fechaFin;
+  document.getElementById('id_vigencia_indefinida').checked = vigenciaIndefinida;
+  document.getElementById('id_incluye_insumo').checked = incluyeInsumo;
+  toggleVigenciaIndefinida();
+
+  modal.style.display = 'flex';
+}
+
+function cerrarModalComision() {
+  document.getElementById('modal-comision').style.display = 'none';
+}
+
+function filtrarCategorias() {
+  const unidadId = document.getElementById('id_unidad_negocio').value;
+  const selectCategoria = document.getElementById('id_categoria_servicio');
+
+  selectCategoria.innerHTML = '<option value="">Seleccionar categoría...</option>';
+
+  if (unidadId && categoriasData[unidadId]) {
+    categoriasData[unidadId].forEach(cat => {
+      const option = document.createElement('option');
+      option.value = cat.id;
+      option.textContent = cat.nombre;
+      selectCategoria.appendChild(option);
+    });
+  }
+}
+
+function toggleVigenciaIndefinida() {
+  const checkbox = document.getElementById('id_vigencia_indefinida');
+  const fechaFin = document.getElementById('id_fecha_fin');
+
+  if (checkbox.checked) {
+    fechaFin.disabled = true;
+    fechaFin.value = '';
+  } else {
+    fechaFin.disabled = false;
+  }
+}
+
+function eliminarEstructuraComision(estructuraId) {
+  if (!confirm('¿Eliminar esta estructura de comisión?')) {
+    return;
+  }
+
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '{% url "eliminar_estructura_comision" 0 %}'.replace('0', estructuraId);
+
+  const csrfToken = document.querySelector('[name="csrfmiddlewaretoken"]').value;
+  const csrfInput = document.createElement('input');
+  csrfInput.type = 'hidden';
+  csrfInput.name = 'csrfmiddlewaretoken';
+  csrfInput.value = csrfToken;
+
+  form.appendChild(csrfInput);
+  document.body.appendChild(form);
+  form.submit();
+}
+
+// Cerrar modal con Escape
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') cerrarModalComision();
+});
 </script>
 {% endblock %}

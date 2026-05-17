@@ -1,0 +1,393 @@
+{% extends "core/base.html" %}
+
+{% block title %}Comisiones - {{ profesional.nombre_publico }}{% endblock %}
+{% block page_title %}Comisiones y Ventas{% endblock %}
+{% block page_subtitle %}Análisis de ingresos, costos y comisiones{% endblock %}
+
+{% block topbar_actions %}
+  {% if user.is_staff %}
+    <a href="{% url 'comisiones' %}" class="btn btn-secondary">← Volver</a>
+  {% endif %}
+  <a href="{% url 'agenda' %}" class="btn btn-primary">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+      <rect x="3" y="4" width="18" height="18" rx="2"/>
+      <line x1="16" y1="2" x2="16" y2="6"/>
+      <line x1="8" y1="2" x2="8" y2="6"/>
+      <line x1="3" y1="10" x2="21" y2="10"/>
+    </svg>
+    Agenda
+  </a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .mode-lista {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 16px;
+  }
+
+  .profesional-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .profesional-card:hover {
+    border-color: var(--accent);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .profesional-card h3 {
+    margin: 0 0 8px 0;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+  }
+
+  .profesional-card p {
+    margin: 4px 0;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+  }
+
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .stat-row.full {
+    grid-column: 1 / -1;
+  }
+
+  .mes-selector {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  .mes-selector input {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.95rem;
+  }
+
+  .resumen-header {
+    background: linear-gradient(135deg, var(--accent), rgba(46, 139, 139, 0.8));
+    color: white;
+    padding: 24px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+  }
+
+  .resumen-header h2 {
+    margin: 0 0 20px 0;
+    font-size: 1.4rem;
+  }
+
+  .resumen-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+  }
+
+  .resumen-item {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 16px;
+    border-radius: 8px;
+    border-left: 3px solid rgba(255, 255, 255, 0.3);
+  }
+
+  .resumen-label {
+    font-size: 0.85rem;
+    opacity: 0.9;
+    margin-bottom: 8px;
+  }
+
+  .resumen-valor {
+    font-size: 1.4rem;
+    font-weight: 600;
+  }
+
+  .tabla-citas {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+
+  .tabla-citas table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .tabla-citas th,
+  .tabla-citas td {
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9rem;
+  }
+
+  .tabla-citas th {
+    background: var(--bg-secondary);
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .tabla-citas tr:hover {
+    background: var(--bg-secondary);
+  }
+
+  .tabla-citas tr:last-child td {
+    border-bottom: none;
+  }
+
+  .monto {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .servicios-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 16px;
+    margin-top: 24px;
+  }
+
+  .servicio-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+
+  .servicio-card h4 {
+    margin: 0 0 12px 0;
+    font-size: 1rem;
+    color: var(--text-primary);
+  }
+
+  .servicio-stat {
+    display: flex;
+    justify-content: space-between;
+    margin: 8px 0;
+    font-size: 0.9rem;
+  }
+
+  .servicio-stat-label {
+    color: var(--text-muted);
+  }
+
+  .servicio-stat-value {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .rentabilidad-bar {
+    height: 6px;
+    background: var(--bg-secondary);
+    border-radius: 3px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+
+  .rentabilidad-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #ff6b6b, #ffd93d, #6bcf7f);
+  }
+
+  @media (max-width: 768px) {
+    .resumen-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .stat-row {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if mode == 'lista' %}
+  <!-- LISTA DE PROFESIONALES -->
+  <div style="margin-bottom: 24px;">
+    <p style="color: var(--text-muted);">Selecciona un profesional para ver su análisis de comisiones:</p>
+  </div>
+
+  <div class="mode-lista">
+    {% for prof in profesionales %}
+    <a href="{% url 'comisiones' %}?profesional={{ prof.id }}" style="text-decoration: none;">
+      <div class="profesional-card">
+        <h3>{{ prof.nombre_publico|default:prof.nombres }}</h3>
+        <p>{{ prof.apellidos }}</p>
+        <p style="font-size: 0.85rem; margin-top: 12px;">
+          <strong>RUT:</strong> {{ prof.rut }}
+        </p>
+        <p style="font-size: 0.85rem;">
+          <strong>Email:</strong> {{ prof.email|default:"Sin email" }}
+        </p>
+      </div>
+    </a>
+    {% empty %}
+    <div class="empty-state">
+      <p>No hay profesionales registrados</p>
+    </div>
+    {% endfor %}
+  </div>
+
+{% else %}
+  <!-- DASHBOARD DE COMISIONES -->
+
+  <!-- Selector de mes -->
+  <div class="mes-selector">
+    <label for="mes-input">Mes:</label>
+    <input type="month" id="mes-input" value="{{ mes }}" onchange="cambiarMes(this.value)">
+    <small style="color: var(--text-muted);">{{ fecha_inicio|date:"d/m/Y" }} a {{ fecha_fin|date:"d/m/Y" }}</small>
+  </div>
+
+  <!-- Resumen principal -->
+  {% if cantidad_citas > 0 %}
+  <div class="resumen-header">
+    <h2>{{ profesional.nombre_publico|default:profesional.nombres }}</h2>
+    <div class="resumen-grid">
+      <div class="resumen-item">
+        <div class="resumen-label">Citas completadas</div>
+        <div class="resumen-valor">{{ cantidad_citas }}</div>
+      </div>
+      <div class="resumen-item">
+        <div class="resumen-label">Ingresos brutos</div>
+        <div class="resumen-valor">${{ total_ingresos|stringformat:"d" }}</div>
+      </div>
+      <div class="resumen-item">
+        <div class="resumen-label">Costo de insumos</div>
+        <div class="resumen-valor" style="color: #ffb3b3;">${{ total_insumos|stringformat:"d" }}</div>
+      </div>
+      <div class="resumen-item">
+        <div class="resumen-label">Descuentos autorizados</div>
+        <div class="resumen-valor" style="color: #ffd93d;">${{ total_descuentos|stringformat:"d" }}</div>
+      </div>
+      <div class="resumen-item">
+        <div class="resumen-label">Monto neto</div>
+        <div class="resumen-valor">${{ total_neto|stringformat:"d" }}</div>
+      </div>
+      <div class="resumen-item">
+        <div class="resumen-label">Comisión total</div>
+        <div class="resumen-valor" style="color: #6bcf7f; font-size: 1.6rem;">💰 ${{ total_comision|stringformat:"d" }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabla de citas -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Detalle de citas ({{ cantidad_citas }})</span>
+      {% if estructura_comision %}
+      <span style="font-size: 0.78rem; color: var(--text-muted);">
+        {{ estructura_comision.get_tipo_comision_display }} ({{ estructura_comision.valor_comision }}%)
+      </span>
+      {% endif %}
+    </div>
+    <div class="tabla-citas">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Paciente</th>
+            <th>Servicio</th>
+            <th style="text-align: right;">Ingresos</th>
+            <th style="text-align: right;">Insumos</th>
+            <th style="text-align: right;">Descuentos</th>
+            <th style="text-align: right;">Neto</th>
+            <th style="text-align: right;">Comisión</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in citas_data %}
+          <tr>
+            <td>{{ item.fecha|date:"d/m/Y" }}</td>
+            <td>{{ item.paciente.nombres }} {{ item.paciente.apellidos }}</td>
+            <td style="color: var(--text-secondary); font-size: 0.9rem;">{{ item.servicio.nombre }}</td>
+            <td style="text-align: right;" class="monto">${{ item.monto_bruto|stringformat:"d" }}</td>
+            <td style="text-align: right;" class="monto" style="color: #ff6b6b;">${{ item.costo_insumos|stringformat:"d" }}</td>
+            <td style="text-align: right;" class="monto" style="color: #ffd93d;">${{ item.monto_descuentos|stringformat:"d" }}</td>
+            <td style="text-align: right;" class="monto">${{ item.monto_neto|stringformat:"d" }}</td>
+            <td style="text-align: right;" class="monto" style="color: #6bcf7f;">💰 ${{ item.monto_comision|stringformat:"d" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Análisis por servicio -->
+  {% if servicios_stats %}
+  <div style="margin-top: 32px;">
+    <h3 style="margin: 0 0 16px 0;">Rentabilidad por servicio</h3>
+    <div class="servicios-stats">
+      {% for servicio, stats in servicios_stats.items %}
+      <div class="servicio-card">
+        <h4>{{ servicio }}</h4>
+        <div class="servicio-stat">
+          <span class="servicio-stat-label">Atenciones:</span>
+          <span class="servicio-stat-value">{{ stats.cantidad }}</span>
+        </div>
+        <div class="servicio-stat">
+          <span class="servicio-stat-label">Ingresos:</span>
+          <span class="servicio-stat-value">${{ stats.ingresos|stringformat:"d" }}</span>
+        </div>
+        <div class="servicio-stat">
+          <span class="servicio-stat-label">Costo insumos:</span>
+          <span class="servicio-stat-value" style="color: #ff6b6b;">${{ stats.insumos|stringformat:"d" }}</span>
+        </div>
+        <div class="servicio-stat">
+          <span class="servicio-stat-label">Comisión:</span>
+          <span class="servicio-stat-value" style="color: #6bcf7f;">💰 ${{ stats.comision|stringformat:"d" }}</span>
+        </div>
+        <div class="servicio-stat">
+          <span class="servicio-stat-label">Rentabilidad:</span>
+          <span class="servicio-stat-value">{{ stats.rentabilidad_promedio|floatformat:1 }}%</span>
+        </div>
+        <div class="rentabilidad-bar">
+          <div class="rentabilidad-fill" style="width: {{ stats.rentabilidad_promedio|floatformat:0 }}%;"></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% else %}
+  <!-- Sin citas en el período -->
+  <div class="empty-state" style="padding: 60px 20px; text-align: center;">
+    <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+      <polyline points="22 4 12 14.01 9 11.01"/>
+    </svg>
+    <h3 style="margin: 16px 0;">No hay citas en este período</h3>
+    <p style="color: var(--text-muted); margin: 0;">
+      Selecciona otro mes o crea nuevas citas en la agenda
+    </p>
+  </div>
+  {% endif %}
+
+  <script>
+    function cambiarMes(mes) {
+      const url = new URL(window.location);
+      url.searchParams.set('mes', mes);
+      window.location = url.toString();
+    }
+  </script>
+
+{% endif %}
+
+{% endblock %}

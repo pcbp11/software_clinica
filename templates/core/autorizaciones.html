@@ -1,0 +1,406 @@
+{% extends "core/base.html" %}
+
+{% block title %}Autorizaciones{% endblock %}
+{% block page_title %}Autorizaciones de Descuento{% endblock %}
+{% block page_subtitle %}Solicitudes de descuento y su estado de autorización{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'agenda' %}" class="btn btn-primary">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+      <rect x="3" y="4" width="18" height="18" rx="2"/>
+      <line x1="16" y1="2" x2="16" y2="6"/>
+      <line x1="8" y1="2" x2="8" y2="6"/>
+      <line x1="3" y1="10" x2="21" y2="10"/>
+    </svg>
+    Ir a agenda
+  </a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .auth-badge-pendiente {
+    background: #fff3cd;
+    color: #856404;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    display: inline-block;
+  }
+
+  .auth-badge-aprobado {
+    background: #d4edda;
+    color: #155724;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    display: inline-block;
+  }
+
+  .auth-badge-rechazado {
+    background: #f8d7da;
+    color: #721c24;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    display: inline-block;
+  }
+
+  .auth-icono {
+    font-size: 0.9rem;
+    margin-right: 4px;
+  }
+
+  .auth-tabs {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 12px;
+  }
+
+  .auth-tab {
+    padding: 8px 16px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -13px;
+    transition: all 0.2s;
+  }
+
+  .auth-tab.active {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .auth-tab:hover {
+    color: var(--text-primary);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+  <!-- Resumen rápido -->
+  {% if autorizaciones %}
+  <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 22px;">
+    <div class="stat-card">
+      <div class="stat-top">
+        <div class="stat-label">Total solicitados</div>
+        <div class="stat-icon si-blue">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+      </div>
+      <div class="stat-value">{{ autorizaciones|length }}</div>
+      <div class="stat-meta">Descuentos</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-top">
+        <div class="stat-label">Pendientes</div>
+        <div class="stat-icon si-orange">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+      </div>
+      <div class="stat-value">{{ total_pendientes }}</div>
+      <div class="stat-meta">Aguardando aprobación</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-top">
+        <div class="stat-label">Aprobadas</div>
+        <div class="stat-icon si-green">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </div>
+      </div>
+      <div class="stat-value">{{ total_aprobadas }}</div>
+      <div class="stat-meta">Autorizadas</div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Pestañas -->
+  {% if autorizaciones %}
+  <div class="auth-tabs" id="auth-tabs-container">
+    <button class="auth-tab active" onclick="filtrarAutorizaciones('todas', this)">
+      Todas ({{ autorizaciones|length }})
+    </button>
+    <button class="auth-tab" onclick="filtrarAutorizaciones('pendientes', this)">
+      Pendientes ({{ total_pendientes }})
+    </button>
+  </div>
+  {% endif %}
+
+  <!-- Tabla de autorizaciones -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Autorizaciones de descuento</span>
+      {% if autorizaciones %}
+      <span style="font-size:0.78rem; color:var(--text-muted);">
+        {{ autorizaciones|length }} solicitaciones
+      </span>
+      {% endif %}
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha solicitud</th>
+            <th>Paciente</th>
+            <th>Servicio</th>
+            <th>Tipo</th>
+            <th>Monto descuento</th>
+            <th>Estado</th>
+            <th>Observación</th>
+            <th>Solicitado por</th>
+            {% if user_is_staff %}<th style="text-align:right;">Acción</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody id="auth-tbody">
+          {% for auth in autorizaciones %}
+          <tr class="auth-row" data-estado="{{ auth.estado }}">
+            <td>
+              <span style="font-weight:500; font-variant-numeric:tabular-nums; font-size:0.85rem;">
+                {{ auth.fecha_solicitud|date:"d/m/Y H:i" }}
+              </span>
+            </td>
+            <td>
+              <div class="pac-info">
+                <div class="pac-avatar">
+                  {{ auth.cita.paciente.nombres|slice:":1" }}{{ auth.cita.paciente.apellidos|slice:":1" }}
+                </div>
+                <div>
+                  <div class="pac-nombre">{{ auth.cita.paciente.nombres }} {{ auth.cita.paciente.apellidos }}</div>
+                  <div class="pac-rut">{{ auth.cita.paciente.rut }}</div>
+                </div>
+              </div>
+            </td>
+            <td style="color:var(--text-secondary); font-size:0.83rem;">
+              {{ auth.cita.servicio.nombre }}
+            </td>
+            <td style="color:var(--text-secondary); font-size:0.83rem;">
+              {{ auth.get_tipo_display }}
+              {% if auth.tipo == 'porcentaje' %}
+                <span style="color:var(--text-muted);">({{ auth.valor }}%)</span>
+              {% endif %}
+            </td>
+            <td style="font-weight:600; font-size:0.85rem;">
+              <span>$</span><span id="monto-{{ auth.id }}">{{ auth.monto_descuento }}</span>
+            </td>
+            <td>
+              {% if auth.estado == 'pendiente' %}
+                <span class="auth-badge-pendiente">
+                  <span class="auth-icono">⏳</span>
+                  {{ auth.get_estado_display }}
+                </span>
+              {% elif auth.estado == 'aprobado' %}
+                <span class="auth-badge-aprobado">
+                  <span class="auth-icono">✓</span>
+                  {{ auth.get_estado_display }}
+                </span>
+              {% elif auth.estado == 'rechazado' %}
+                <span class="auth-badge-rechazado">
+                  <span class="auth-icono">✕</span>
+                  {{ auth.get_estado_display }}
+                </span>
+              {% endif %}
+            </td>
+            <td style="color:var(--text-muted); font-size:0.8rem; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+              {% if auth.razon %}
+                {% if auth.estado == 'rechazado' %}
+                  <span title="{{ auth.razon|slice:'10:' }}">{{ auth.razon|slice:'10:' }}</span>
+                {% else %}
+                  {{ auth.razon }}
+                {% endif %}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td style="color:var(--text-muted); font-size:0.8rem;">
+              {{ auth.solicitado_por }}
+            </td>
+            {% if user_is_staff %}
+            <td style="text-align:right;">
+              {% if auth.estado == 'pendiente' %}
+                <button type="button" onclick="abrirModalRechazo({{ auth.id }})" class="btn btn-ghost" style="font-size:0.75rem; padding:4px 8px; margin-right:4px;">
+                  ✕ Rechazar
+                </button>
+                <button type="button" onclick="aprobarDescuento({{ auth.id }})" class="btn btn-primary" style="font-size:0.75rem; padding:4px 8px;">
+                  ✓ Aprobar
+                </button>
+              {% else %}
+                <span style="font-size:0.75rem; color:var(--text-muted);">Procesado</span>
+              {% endif %}
+            </td>
+            {% endif %}
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="8">
+              <div class="empty-state">
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+                <p>No hay autorizaciones registradas</p>
+                <p style="margin-top:4px; font-size:0.78rem; color:var(--text-muted);">Los descuentos solicitados aparecerán aquí</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Modal para motivo de rechazo -->
+  <div id="modal-rechazo" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:1000; padding:20px; align-items:center; justify-content:center;">
+    <div style="background:white; border-radius:12px; padding:24px; max-width:500px; width:100%; box-shadow:0 10px 30px rgba(0,0,0,0.2);">
+      <h3 style="margin:0 0 16px 0; font-size:1.1rem; color:var(--text-primary);">Motivo de rechazo</h3>
+      <p style="margin:0 0 12px 0; font-size:0.9rem; color:var(--text-secondary);">Ingresa el motivo para que recepción lo vea claramente.</p>
+      <textarea id="motivo-rechazo-text" style="width:100%; height:100px; padding:12px; border:1px solid var(--border); border-radius:8px; font-family:inherit; font-size:0.9rem; resize:vertical; box-sizing:border-box;" placeholder="Ej: El porcentaje solicitado excede el límite permitido..."></textarea>
+      <div style="display:flex; gap:8px; margin-top:16px; justify-content:flex-end;">
+        <button type="button" onclick="cerrarModalRechazo()" class="btn btn-ghost">Cancelar</button>
+        <button type="button" onclick="confirmarRechazo()" class="btn btn-primary">Rechazar</button>
+      </div>
+    </div>
+  </div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function getCsrf() {
+    const name = 'csrftoken';
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
+  async function aprobarDescuento(descuentoId) {
+    if (!confirm('¿Aprobar este descuento?')) return;
+
+    const form = new FormData();
+    form.append('accion', 'aprobar');
+
+    try {
+      const resp = await fetch(`/descuentos/${descuentoId}/autorizar/`, {
+        method: 'POST',
+        body: form,
+        headers: { 'X-CSRFToken': getCsrf() }
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        alert('✓ Descuento aprobado');
+        location.reload();
+      } else {
+        alert('Error: ' + (data.error || 'No se pudo procesar'));
+      }
+    } catch (e) {
+      alert('Error de conexión');
+    }
+  }
+
+  let _descuentoIdRechazo = null;
+
+  function abrirModalRechazo(descuentoId) {
+    _descuentoIdRechazo = descuentoId;
+    document.getElementById('motivo-rechazo-text').value = '';
+    document.getElementById('modal-rechazo').style.display = 'flex';
+  }
+
+  function cerrarModalRechazo() {
+    document.getElementById('modal-rechazo').style.display = 'none';
+    _descuentoIdRechazo = null;
+  }
+
+  async function confirmarRechazo() {
+    if (!_descuentoIdRechazo) return;
+
+    const motivo = document.getElementById('motivo-rechazo-text').value.trim();
+    if (!motivo) {
+      alert('Por favor ingresa un motivo de rechazo');
+      return;
+    }
+
+    const form = new FormData();
+    form.append('accion', 'rechazar');
+    form.append('razon', motivo);
+
+    try {
+      const resp = await fetch(`/descuentos/${_descuentoIdRechazo}/autorizar/`, {
+        method: 'POST',
+        body: form,
+        headers: { 'X-CSRFToken': getCsrf() }
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        alert('✗ Descuento rechazado');
+        location.reload();
+      } else {
+        alert('Error: ' + (data.error || 'No se pudo procesar'));
+      }
+    } catch (e) {
+      alert('Error de conexión');
+    }
+  }
+
+  function filtrarAutorizaciones(filtro, element) {
+    // Actualizar tabs
+    document.querySelectorAll('.auth-tab').forEach(tab => tab.classList.remove('active'));
+    element.classList.add('active');
+
+    // Filtrar filas
+    const filas = document.querySelectorAll('.auth-row');
+    filas.forEach(fila => {
+      if (filtro === 'todas') {
+        fila.style.display = '';
+      } else if (filtro === 'pendientes') {
+        fila.style.display = fila.dataset.estado === 'pendiente' ? '' : 'none';
+      } else if (filtro === 'procesadas') {
+        fila.style.display = fila.dataset.estado !== 'pendiente' ? '' : 'none';
+      }
+    });
+
+    // Mostrar/ocultar mensaje vacío si no hay resultados
+    const tbody = document.getElementById('auth-tbody');
+    const visibles = Array.from(filas).filter(f => f.style.display !== 'none');
+    if (visibles.length === 0 && filas.length > 0) {
+      // Mostrar mensaje vacío
+      tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state" style="text-align:center; padding:32px;"><p>No hay autorizaciones en esta categoría</p></div></td></tr>';
+    }
+  }
+
+  // Formatear montos con puntos de miles
+  window.addEventListener('load', function() {
+    document.querySelectorAll('[id^="monto-"]').forEach(elem => {
+      const valor = parseInt(elem.textContent);
+      elem.textContent = valor.toLocaleString('es-CL');
+    });
+  });
+</script>
+{% endblock %}

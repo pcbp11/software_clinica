@@ -1,0 +1,370 @@
+{% extends "core/base.html" %}
+{% load clinica_tags %}
+
+{% block title %}Editar servicio - {{ servicio.nombre }}{% endblock %}
+{% block page_title %}Editar servicio{% endblock %}
+{% block page_subtitle %}{{ servicio.nombre }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .form-container {
+    max-width: 900px;
+  }
+  .form-section {
+    margin-bottom: 28px;
+  }
+  .form-section-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .form-group {
+    margin-bottom: 14px;
+  }
+  .form-group label {
+    display: block;
+    font-size: 0.84rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+  .form-group input[type="text"],
+  .form-group input[type="number"],
+  .form-group textarea,
+  .form-group select {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.84rem;
+    color: var(--text-primary);
+    background: var(--bg-card);
+    transition: border-color 0.15s;
+  }
+  .form-group input[type="text"]:focus,
+  .form-group input[type="number"]:focus,
+  .form-group textarea:focus,
+  .form-group select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-light);
+  }
+  .form-group textarea {
+    resize: vertical;
+    font-family: inherit;
+  }
+  .dias-seg-wrap {
+    margin-top: 10px;
+    padding: 12px 14px;
+    background: var(--bg-main);
+    border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+  .profs-checks {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .prof-check-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    transition: border-color 0.15s, background 0.15s;
+    user-select: none;
+  }
+  .prof-check-label:hover {
+    border-color: var(--accent);
+    background: var(--accent-light);
+  }
+  .prof-check-label input:checked + span {
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+  .checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .checkbox-group input[type="checkbox"] {
+    cursor: pointer;
+  }
+  .checkbox-group span {
+    font-size: 0.84rem;
+    color: var(--text-secondary);
+  }
+  .helper-text {
+    color: var(--text-muted);
+    font-weight: 400;
+    font-size: 0.78rem;
+    margin-top: 2px;
+  }
+  .btn-danger {
+    background: #ef4444;
+    color: #fff;
+    border: 1px solid #ef4444;
+  }
+  .btn-danger:hover {
+    background: #dc2626;
+    border-color: #dc2626;
+  }
+  .modal-overlay { position:fixed; inset:0; background:rgba(15,20,40,0.5); backdrop-filter:blur(5px); z-index:500; display:flex; align-items:center; justify-content:center; padding:20px; animation:mo-fade 0.18s ease; }
+  @keyframes mo-fade { from{opacity:0} to{opacity:1} }
+  .modal-card { background:#fff; border-radius:18px; box-shadow:0 24px 64px rgba(15,20,40,0.28); width:100%; max-width:520px; animation:mo-up 0.22s ease; overflow:hidden; max-height:90vh; display:flex; flex-direction:column; }
+  @keyframes mo-up { from{opacity:0;transform:translateY(18px) scale(0.97)} to{opacity:1;transform:translateY(0) scale(1)} }
+  .modal-head { padding:22px 24px 0; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+  .modal-titulo { font-size:1.05rem; font-weight:500; color:var(--text-primary); }
+  .modal-cerrar { width:30px; height:30px; border-radius:50%; border:none; background:var(--bg-main); cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:1.1rem; transition:all 0.15s; }
+  .modal-cerrar:hover { background:var(--border); color:var(--text-primary); }
+  .modal-footer { padding:14px 24px; border-top:1px solid var(--border); display:flex; gap:10px; justify-content:flex-end; flex-shrink:0; background:var(--bg-card); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="card form-container" style="padding: 32px;">
+  <form method="post">
+    {% csrf_token %}
+
+    <!-- Información básica -->
+    <div class="form-section">
+      <div class="form-section-title">Información básica</div>
+
+      <div class="form-group">
+        <label for="id_nombre">Nombre del servicio</label>
+        <input type="text" id="id_nombre" name="nombre" value="{{ servicio.nombre }}" required placeholder="Ej: Botox frente">
+      </div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label for="id_unidad_negocio">Unidad de negocio</label>
+          <select id="id_unidad_negocio" name="unidad_negocio" required>
+            <option value="">Seleccionar...</option>
+            {% for u in unidades %}
+            <option value="{{ u.id }}" {% if u.id == servicio.unidad_negocio.id %}selected{% endif %}>{{ u.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="id_categoria">Categoría</label>
+          <select id="id_categoria" name="categoria">
+            <option value="">Sin categoría</option>
+            {% for c in categorias %}
+            <option value="{{ c.id }}" {% if c.id == servicio.categoria.id %}selected{% endif %}>{{ c.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="id_descripcion">Descripción <span class="helper-text">(opcional)</span></label>
+        <textarea id="id_descripcion" name="descripcion" rows="2" placeholder="Descripción breve del servicio...">{{ servicio.descripcion }}</textarea>
+      </div>
+    </div>
+
+    <!-- Configuración del servicio -->
+    <div class="form-section">
+      <div class="form-section-title">Configuración del servicio</div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label for="id_duracion">Duración (minutos)</label>
+          <input type="number" id="id_duracion" name="duracion_minutos" min="1" step="1" value="{{ servicio.duracion_minutos }}" required>
+        </div>
+        <div class="form-group">
+          <label for="id_precio">Precio ($)</label>
+          <input type="number" id="id_precio" name="precio" min="0" step="100" value="{{ servicio.precio }}" required>
+        </div>
+      </div>
+    </div>
+
+    <!-- Seguimiento comercial -->
+    <div class="form-section">
+      <div class="form-section-title">Seguimiento comercial</div>
+
+      <div class="form-group">
+        <label class="checkbox-group">
+          <input type="checkbox" id="id_requiere_seguimiento" name="requiere_seguimiento"
+                 onchange="toggleSeguimiento(this)"
+                 {% if servicio.requiere_seguimiento %}checked{% endif %}>
+          <span>Requiere seguimiento post-cita</span>
+        </label>
+      </div>
+
+      <div id="dias-seguimiento-wrap" class="dias-seg-wrap" style="{% if not servicio.requiere_seguimiento %}display:none;{% endif %}">
+        <div class="form-group" style="margin-bottom:0;">
+          <label for="id_dias_seguimiento">Días para el seguimiento</label>
+          <input type="number" id="id_dias_seguimiento" name="dias_seguimiento" min="1" max="365"
+                 value="{{ servicio.dias_seguimiento|default:7 }}"
+                 placeholder="Ej: 7"
+                 {% if servicio.requiere_seguimiento %}required{% endif %}>
+        </div>
+      </div>
+    </div>
+
+    <!-- Profesionales asignados -->
+    {% if profesionales %}
+    <div class="form-section">
+      <div class="form-section-title">Profesionales asignados</div>
+      <div class="profs-checks">
+        {% for prof in profesionales %}
+        <label class="prof-check-label">
+          <input type="checkbox" name="profesionales" value="{{ prof.id }}"
+                 {% if prof.id in servicio_prof_ids %}checked{% endif %}>
+          <span>{{ prof.nombres }} {{ prof.apellidos }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Insumos -->
+    <div class="form-section">
+      <div class="form-section-title">Insumos</div>
+
+      <div class="form-group">
+        <label class="checkbox-group">
+          <input type="checkbox" id="id_utiliza_insumos" name="utiliza_insumos"
+                 onchange="toggleInsumos(this)"
+                 {% if servicio.insumos_usados.exists %}checked{% endif %}>
+          <span>Este servicio utiliza insumos</span>
+        </label>
+      </div>
+
+      <div id="insumos-wrap" style="{% if not servicio.insumos_usados.exists %}display:none;{% endif %} margin-top: 10px; padding: 12px 14px; background: var(--bg-main); border-radius: 10px; border: 1px solid var(--border);">
+        {% if insumos %}
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+            {% for insumo in insumos %}
+            <label class="prof-check-label">
+              <input type="checkbox" name="insumos" value="{{ insumo.id }}"
+                     {% if insumo.id in servicio_insumo_ids %}checked{% endif %}>
+              <span>{{ insumo.nombre }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p style="color: var(--text-muted); font-size: 0.82rem; margin: 0;">
+            No hay insumos disponibles. Créalos en la sección de Administración.
+          </p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Acciones -->
+    <div class="form-actions">
+      <button type="button" class="btn btn-danger" onclick="abrirModalEliminar()" style="margin-right:auto;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="display:inline; margin-right:4px;">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          <line x1="10" y1="11" x2="10" y2="17"/>
+          <line x1="14" y1="11" x2="14" y2="17"/>
+        </svg>
+        Eliminar servicio
+      </button>
+      <a href="{% url 'servicios' %}" class="btn btn-ghost">Cancelar</a>
+      <button type="submit" class="btn btn-primary">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="display:inline; margin-right:4px;">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Guardar cambios
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Modal de confirmación para eliminar -->
+<div id="modal-eliminar" class="modal-overlay" style="display:none;" onclick="if(event.target===this)cerrarModalEliminar()">
+  <div class="modal-card" style="max-width:420px;">
+    <div class="modal-head">
+      <span class="modal-titulo">Eliminar servicio</span>
+      <button class="modal-cerrar" onclick="cerrarModalEliminar()" type="button">&#x2715;</button>
+    </div>
+    <div class="modal-body" style="padding: 20px 24px;">
+      <p style="color: var(--text-secondary); margin-bottom: 16px;">
+        ¿Estás seguro de que deseas eliminar el servicio <strong>"{{ servicio.nombre }}"</strong>?
+      </p>
+      <p style="color: var(--text-muted); font-size: 0.82rem; margin-bottom: 0;">
+        Esta acción no se puede deshacer. Si hay citas asociadas a este servicio, se eliminarán también.
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" onclick="cerrarModalEliminar()">Cancelar</button>
+      <form method="post" action="{% url 'eliminar_servicio' servicio.id %}" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="display:inline; margin-right:4px;">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            <line x1="10" y1="11" x2="10" y2="17"/>
+            <line x1="14" y1="11" x2="14" y2="17"/>
+          </svg>
+          Sí, eliminar
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleSeguimiento(cb) {
+  var wrap = document.getElementById('dias-seguimiento-wrap');
+  var inp = document.getElementById('id_dias_seguimiento');
+  if (cb.checked) {
+    wrap.style.display = 'block';
+    inp.required = true;
+  } else {
+    wrap.style.display = 'none';
+    inp.required = false;
+  }
+}
+
+function toggleInsumos(cb) {
+  var wrap = document.getElementById('insumos-wrap');
+  if (cb.checked) {
+    wrap.style.display = 'block';
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
+function abrirModalEliminar() {
+  document.getElementById('modal-eliminar').style.display = 'flex';
+}
+
+function cerrarModalEliminar() {
+  document.getElementById('modal-eliminar').style.display = 'none';
+}
+
+// Cerrar modal con Escape
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') cerrarModalEliminar();
+});
+</script>
+{% endblock %}

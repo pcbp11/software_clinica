@@ -6,19 +6,60 @@
 {% block page_subtitle %}{% endblock %}
 
 {% block extra_head %}
+<!-- Flatpickr date picker -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
+
 <style>
-  .page-content { padding: 0; overflow: hidden; }
+  /* Forzar que SOLO .cal-scroll scrollee, no el body */
+  html, body {
+    overflow: hidden !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+  }
+  .main-wrap {
+    height: 100vh !important;
+    max-height: 100vh !important;
+    overflow: hidden !important;
+  }
+  .page-content {
+    padding: 0 !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: calc(100vh - 62px) !important;
+    max-height: calc(100vh - 62px) !important;
+    min-height: 0 !important;
+  }
 
   /* ── Barra superior ── */
   .agenda-bar {
     display: flex; align-items: center; gap: 16px;
-    padding: 10px 20px; background: var(--bg-card);
-    border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap;
+    padding: 14px 24px; background: #ffffff;
+    border-bottom: 1px solid #f0f0f0; flex-shrink: 0; flex-wrap: wrap;
+    min-height: 60px;
   }
-  .leyenda { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  .leyenda-item { display: flex; align-items: center; gap: 5px; font-size: 0.72rem; color: var(--text-secondary); }
-  .leyenda-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-  .leyenda-sep { width: 1px; height: 14px; background: var(--border); margin: 0 4px; }
+  .btn-toggle-sidebar {
+    width: 32px; height: 32px; border-radius: 7px; border: 1px solid var(--border);
+    background: var(--bg-card); cursor: pointer; display: flex; align-items: center;
+    justify-content: center; color: var(--text-secondary); transition: all 0.2s;
+    font-size: 1.1rem; line-height: 1;
+  }
+  .btn-toggle-sidebar:hover { background: var(--bg-main); color: var(--text-primary); }
+
+  /* Sidebar ocultable */
+  .agenda-sidebar {
+    width: 200px; border-right: 1px solid #f0f0f0; background: #fff; overflow-y: auto;
+    padding: 12px 10px; flex-shrink: 0; transition: all 0.3s ease;
+  }
+  .agenda-sidebar.hidden {
+    width: 0; padding: 0; border-right: none; overflow: hidden;
+  }
+  .leyenda { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .leyenda-item { display: flex; align-items: center; gap: 5px; font-size: 0.7rem; color: #666; font-weight: 500; }
+  .leyenda-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .leyenda-sep { width: 1px; height: 12px; background: #e0e0e0; margin: 0 4px; }
   .agenda-bar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
   .agenda-bar-right select {
     padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px;
@@ -39,22 +80,215 @@
   .btn-hoy { padding: 0 12px; width: auto; font-size: 0.76rem; font-weight: 500; }
   .btn-hoy.activo { background: var(--accent-light); color: var(--accent); border-color: #c8e8d8; }
 
-  /* ── Calendario ── */
-  .cal-scroll { overflow: auto; height: calc(100vh - 130px); background: var(--bg-main); }
-  .cal-table { border-collapse: collapse; table-layout: fixed; min-width: 600px; width: 100%; }
-
-  /* Header profesionales */
-  .cal-head-row th {
-    position: sticky; top: 0; z-index: 20;
+  /* ── Date picker moderno ── */
+  .nav-date-picker {
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    color: var(--text-primary);
     background: var(--bg-card);
-    border-bottom: 2px solid var(--border);
-    box-shadow: 0 2px 12px rgba(0,0,0,0.07);
-    padding: 16px 12px 14px; text-align: center; min-width: 180px;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 180px;
+    text-align: center;
+    position: relative;
   }
+  .nav-date-picker::placeholder {
+    color: var(--text-muted);
+  }
+  .nav-date-picker:hover {
+    background: var(--bg-main);
+    border-color: var(--accent);
+  }
+  .nav-date-picker:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(78, 161, 127, 0.1);
+  }
+
+  /* Estilos personalizados de Flatpickr */
+  .flatpickr-calendar {
+    font-family: var(--font-body);
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+    border: none;
+    background: var(--bg-card);
+  }
+  .flatpickr-days { background: var(--bg-card); }
+  .flatpickr-current-month { background: #ffffff; }
+  .flatpickr-current-month .flatpickr-monthDropdown-months,
+  .flatpickr-current-month .numInputWrapper { color: var(--text-primary); }
+
+  .flatpickr-day {
+    color: var(--text-primary);
+    border-radius: 6px;
+  }
+  .flatpickr-day:hover,
+  .flatpickr-day.prevMonthDay:hover,
+  .flatpickr-day.nextMonthDay:hover {
+    background: var(--accent-light);
+    color: var(--accent);
+  }
+  .flatpickr-day.selected,
+  .flatpickr-day.selected:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+    font-weight: 600;
+  }
+  .flatpickr-day.today {
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .flatpickr-weekdays { background: #f5f5f5; }
+  .flatpickr-weekday { color: var(--text-secondary); font-weight: 500; }
+
+  /* ── Mini Calendario Inline ── */
+  .mini-calendar {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 8px;
+    font-family: var(--font-body);
+  }
+  .mini-cal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    padding: 0 2px;
+  }
+  .mini-cal-nav {
+    background: none;
+    border: none;
+    padding: 2px 6px;
+    cursor: pointer;
+    color: #666;
+    font-size: 0.8rem;
+    border-radius: 3px;
+    transition: all 0.2s;
+  }
+  .mini-cal-nav:hover {
+    background: #f0f0f0;
+    color: var(--accent);
+  }
+  .mini-cal-title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #333;
+    text-align: center;
+    flex: 1;
+  }
+  .mini-cal-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    margin-bottom: 4px;
+  }
+  .mini-cal-weekday {
+    text-align: center;
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: #999;
+    padding: 2px 0;
+  }
+  .mini-cal-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+  }
+  .mini-cal-day {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    border-radius: 4px;
+    cursor: pointer;
+    background: #fff;
+    color: #333;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+    min-height: 22px;
+  }
+  .mini-cal-day:hover {
+    background: #f5f5f5;
+    color: var(--accent);
+  }
+  .mini-cal-day.other-month {
+    color: #ddd;
+    cursor: default;
+    font-size: 0.65rem;
+  }
+  .mini-cal-day.other-month:hover {
+    background: #fff;
+    color: #ddd;
+  }
+  .mini-cal-day.today {
+    background: var(--accent-light);
+    color: var(--accent);
+    font-weight: 600;
+    border-color: var(--accent);
+  }
+  .mini-cal-day.selected {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+    border-color: var(--accent);
+  }
+
+  /* ── Calendario ── */
+  .cal-scroll {
+    overflow: auto;
+    flex: 1;
+    background: #fafbfc;
+    position: relative;          /* containing block para sticky */
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Scrollbar más fino y discreto (estilo AgendaPro) */
+  .cal-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+  .cal-scroll::-webkit-scrollbar-track { background: transparent; }
+  .cal-scroll::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.15); border-radius: 5px; border: 2px solid #fafbfc;
+  }
+  .cal-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.28); }
+
+  .cal-table {
+    /* separate + spacing 0 para que sticky funcione en celdas si el browser lo soporta */
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    table-layout: fixed;
+    min-width: 600px;
+    width: 100%;
+  }
+
+  /* Header profesionales — sticky nativo (ahora que .cal-scroll SÍ scrollea
+     internamente, el sticky funciona sin lag). Sin box-shadow porque recortaba
+     visualmente el primer label de hora. */
+  .cal-head-row th {
+    background: #ffffff !important;
+    border-bottom: 1px solid #e8eaed;
+    padding: 12px 12px 10px !important;
+    text-align: center !important;
+    min-width: 140px;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 20 !important;
+  }
+  /* Esquina superior izquierda — sticky en ambos ejes */
   .cal-corner {
     width: 60px !important; min-width: 60px !important;
-    position: sticky !important; left: 0; z-index: 30 !important;
-    border-right: 1px solid var(--border); background: var(--bg-card) !important;
+    position: sticky !important;
+    left: 0 !important;
+    top: 0 !important;
+    z-index: 30 !important;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid #e8eaed;
+    background: #ffffff !important;
   }
 
   /* Colores dinámicos de avatar por columna */
@@ -67,31 +301,42 @@
   .cal-head-row th:nth-child(8) .pro-avatar { --pro-bg: #4caf8a; }
   .cal-head-row th:nth-child(9) .pro-avatar { --pro-bg: #5b8dd9; }
 
-  .pro-header-wrap { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .pro-header-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; }
   .pro-avatar {
-    width: 46px; height: 46px; border-radius: 50%;
+    width: 40px; height: 40px; border-radius: 50%;
     background: var(--pro-bg, var(--accent));
     color: #fff; display: inline-flex; align-items: center; justify-content: center;
-    font-size: 0.9rem; font-weight: 700; letter-spacing: 0.02em;
+    font-size: 0.85rem; font-weight: 700; letter-spacing: 0.02em;
     overflow: hidden; flex-shrink: 0;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    border: 2px solid #fff;
   }
   .pro-avatar img {
     width: 100%; height: 100%; object-fit: cover; border-radius: 50%;
   }
-  .pro-name { font-size: 0.8rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
-  .pro-subtitle { font-size: 0.68rem; color: var(--text-muted); white-space: nowrap; font-style: italic; }
+  .pro-name { font-size: 0.76rem; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+  .pro-subtitle { font-size: 0.65rem; color: #999; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
 
-  /* Gutter horas */
+  /* Gutter horas — sticky nativo al hacer scroll horizontal.
+     padding-top: empuja el contenido hacia abajo para que el primer label
+     09:00 quede libre del thead sticky. */
   .cal-gutter-td {
-    width: 60px; min-width: 60px; padding: 0; vertical-align: top;
-    border-right: 1px solid var(--border); background: var(--bg-main);
-    position: sticky; left: 0; z-index: 10;
+    width: 60px; min-width: 60px;
+    padding: 28px 0 0 0;
+    vertical-align: top;
+    border-right: 1px solid #f0f0f0;
+    background: #fafbfc;
+    position: sticky !important;
+    left: 0 !important;
+    z-index: 15 !important;
   }
-  .cal-gutter-inner { position: relative; width: 60px; }
+  .cal-gutter-inner {
+    position: relative;
+    width: 60px;
+  }
   .cal-hour-lbl {
     position: absolute; right: 8px; font-size: 0.68rem; font-weight: 500;
-    color: var(--text-muted); transform: translateY(-50%); white-space: nowrap;
+    color: #999; transform: translateY(-50%); white-space: nowrap;
     font-variant-numeric: tabular-nums; user-select: none;
   }
   .now-dot {
@@ -105,31 +350,34 @@
   }
 
   /* Columna profesional */
+  /* Columna profesional: mismo padding-top que el gutter para mantener
+     líneas y bloques alineados horizontalmente con los labels de horas. */
   .cal-col-td {
-    padding: 0; vertical-align: top;
-    border-right: 2px solid rgba(0,0,0,0.07);
+    padding: 28px 0 0 0;
+    vertical-align: top;
+    border-right: 1px solid #f0f0f0;
   }
   .cal-col-inner {
     position: relative; width: 100%;
     background-image: repeating-linear-gradient(
-      to bottom, transparent 0px, transparent 27px, rgba(0,0,0,0.3) 27px, rgba(0,0,0,0.3) 28px
+      to bottom, transparent 0px, transparent 27px, rgba(0,0,0,0.03) 27px, rgba(0,0,0,0.03) 28px
     );
-    animation: cal-fade-in 0.3s ease both;
+    animation: cal-fade-in 0.25s ease both;
   }
   @keyframes cal-fade-in {
-    from { opacity: 0; transform: translateY(6px); }
+    from { opacity: 0; transform: translateY(4px); }
     to   { opacity: 1; transform: translateY(0); }
   }
   /* Profesionales sin horarios ese día */
-  .cal-col-td.sin-horarios-col { background: rgba(0,0,0,0.06); }
+  .cal-col-td.sin-horarios-col { background: transparent; }
   .cal-col-td.sin-horarios-col .cal-col-inner {
     background-image: repeating-linear-gradient(
-      to bottom, transparent 0px, transparent 27px, rgba(0,0,0,0.12) 27px, rgba(0,0,0,0.12) 28px
+      to bottom, transparent 0px, transparent 27px, rgba(0,0,0,0.02) 27px, rgba(0,0,0,0.02) 28px
     );
     pointer-events: none;
   }
   .cal-col-td.sin-horarios-col .cal-slot-btn { display: none; }
-  .cal-hour-line { position: absolute; left: 0; right: 0; height: 1px; background: rgba(0,0,0,0.1); z-index: 1; pointer-events: none; }
+  .cal-hour-line { position: absolute; left: 0; right: 0; height: 1px; background: rgba(0,0,0,0.03); z-index: 1; pointer-events: none; }
   .cal-now-line { position: absolute; left: 0; right: 0; height: 2px; background: #e53e3e; z-index: 4; pointer-events: none; }
   .cal-now-line::before {
     content: ''; position: absolute; left: -1px; top: -4px;
@@ -152,63 +400,73 @@
   /* Tarjeta de cita */
   .cal-event {
     position: absolute; left: 4px; right: 4px; border-radius: 8px;
-    padding: 5px 8px; cursor: pointer; z-index: 3; overflow: hidden;
-    border-left: 4px solid transparent;
-    transition: box-shadow 0.2s, transform 0.2s, filter 0.2s;
-    box-shadow: 0 1px 5px rgba(0,0,0,0.12);
+    padding: 6px 10px; cursor: pointer; z-index: 3; overflow: hidden;
+    border-left: 5px solid transparent;
+    transition: box-shadow 0.2s, transform 0.18s, filter 0.18s;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
   }
   .cal-event:hover {
-    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
-    transform: scale(1.015);
-    filter: brightness(0.97);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+    transform: translateY(-2px);
     z-index: 10;
   }
   /* Estado de cita */
   .cal-event.reservado {
-    background: linear-gradient(135deg, #eef3fb 0%, #e0ebf7 100%);
-    border-left-color: #5b8dd9;
+    background: linear-gradient(135deg, #dde9f8 0%, #c9ddf3 100%);
+    border-left-color: #4a7abd;
   }
   .cal-event.pendiente {
-    background: linear-gradient(135deg, #fff8e8 0%, #ffefd0 100%);
-    border-left-color: #e0900d;
+    background: linear-gradient(135deg, #fff3d6 0%, #ffe5b4 100%);
+    border-left-color: #d97e03;
   }
   .cal-event.confirmado {
-    background: linear-gradient(135deg, #e0f7f4 0%, #b2ebe7 100%);
+    background: linear-gradient(135deg, #cef0ed 0%, #9ee4de 100%);
     border-left-color: #0097a7;
   }
   .cal-event.en_espera {
-    background: linear-gradient(135deg, #fff5e8 0%, #ffe8d0 100%);
-    border-left-color: #d4810c;
+    background: linear-gradient(135deg, #ffecc8 0%, #ffd9a3 100%);
+    border-left-color: #c26f00;
   }
   .cal-event.asistio {
-    background: linear-gradient(135deg, #d4eddf 0%, #b3e5d4 100%);
+    background: linear-gradient(135deg, #c7e5d3 0%, #a8d9ba 100%);
     border-left-color: #1b5e48;
   }
   .cal-event.no_asistio {
-    background: linear-gradient(135deg, #f4f4f4 0%, #e8e8e8 100%);
-    border-left-color: #888;
+    background: linear-gradient(135deg, #ebebeb 0%, #d9d9d9 100%);
+    border-left-color: #666;
   }
   .cal-event.cancelada {
-    background: linear-gradient(135deg, #f5f5f5 0%, #ececec 100%);
-    border-left-color: #999;
-    opacity: 0.65;
+    background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%);
+    border-left-color: #888;
+    opacity: 0.6;
   }
   .cal-event.reprogramada {
-    background: linear-gradient(135deg, #f0eef9 0%, #e8e4f4 100%);
+    background: linear-gradient(135deg, #e8dff6 0%, #dcc9ed 100%);
     border-left-color: #6b54b0;
   }
 
   /* Icono de estado de pago */
   .ev-pago-icon {
-    position: absolute; top: 3px; right: 4px;
-    font-size: 0.65rem; line-height: 1; font-weight: 700;
-    background: rgba(0,0,0,0.12); color: var(--text-primary);
-    width: 16px; height: 16px; border-radius: 50%;
+    position: absolute; top: 2px; right: 3px;
+    font-size: 0.7rem; line-height: 1; font-weight: 700;
+    background: rgba(0,0,0,0.18); color: #fff;
+    width: 18px; height: 18px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.25);
+    border: 1.5px solid rgba(255,255,255,0.8);
   }
-  .ev-time    { font-size: 0.62rem; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; line-height: 1.3; }
-  .ev-patient { font-size: 0.77rem; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.35; padding-right: 18px; }
-  .ev-service { font-size: 0.68rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+  /* Colores específicos de pago */
+  .ev-pago-icon.pagado {
+    background: #16a34a; color: #fff;
+    box-shadow: 0 2px 6px rgba(22, 163, 74, 0.35);
+  }
+  .ev-pago-icon.abonado {
+    background: #ea580c; color: #fff;
+    box-shadow: 0 2px 6px rgba(234, 88, 12, 0.35);
+  }
+  .ev-time    { font-size: 0.64rem; color: rgba(0,0,0,0.65); font-variant-numeric: tabular-nums; white-space: nowrap; line-height: 1.2; font-weight: 500; }
+  .ev-patient { font-size: 0.81rem; font-weight: 700; color: rgba(0,0,0,0.82); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; padding-right: 18px; }
+  .ev-service { font-size: 0.7rem; color: rgba(0,0,0,0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.25; }
 
   /* Sin horario */
   .sin-horario {
@@ -384,15 +642,17 @@
 
 {% block topbar_actions %}
 <div style="display:flex; align-items:center; gap:6px;">
-  <a href="?fecha={{ fecha_anterior|date:'Y-m-d' }}&servicio={{ servicio_id }}" class="btn-nav">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="15 18 9 12 15 6"/></svg>
-  </a>
-  <span class="nav-dia {% if fecha == hoy %}es-hoy{% endif %}">
-    {{ fecha|date:"l j \d\e F" }}{% if fecha == hoy %} · <span style="font-weight:400; font-size:0.82rem;">Hoy</span>{% endif %}
-  </span>
-  <a href="?fecha={{ fecha_siguiente|date:'Y-m-d' }}&servicio={{ servicio_id }}" class="btn-nav">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"/></svg>
-  </a>
+  <button id="btn-sidebar-toggle" class="btn-toggle-sidebar" title="Mostrar/ocultar filtros" type="button" style="width: 32px; height: 32px;">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+  </button>
+
+  <!-- Date picker moderno con Flatpickr -->
+  <input type="text" id="nav-date-input" class="nav-date-picker"
+         placeholder="Selecciona una fecha"
+         readonly>
+
   <a href="?fecha={{ hoy|date:'Y-m-d' }}&servicio={{ servicio_id }}"
      class="btn-nav btn-hoy {% if fecha == hoy %}activo{% endif %}">Hoy</a>
 </div>
@@ -431,9 +691,60 @@
   </div>
 </div>
 
-<!-- ── CALENDARIO ── -->
-{% if not agenda_general %}
-  <div class="sin-horario">
+<!-- ── WRAPPER SIDEBAR + CALENDARIO ── -->
+<div style="display: flex; flex: 1; gap: 0; min-height: 0; overflow: hidden;">
+
+  <!-- ── SIDEBAR IZQUIERDO ── -->
+  <div id="agenda-sidebar" class="agenda-sidebar">
+
+    <!-- Filtro: Sucursal -->
+    <div style="margin-bottom: 14px;">
+      <label style="display: block; font-size: 0.65rem; font-weight: 600; text-transform: uppercase; color: #999; margin-bottom: 4px; letter-spacing: 0.05em;">Sucursal</label>
+      <select id="filtro-sucursal" style="width: 100%; padding: 5px 8px; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 0.75rem; background: #fff; cursor: pointer;">
+        <option value="">Todas</option>
+        {% for sucursal in sucursales %}
+          <option value="{{ sucursal.id }}">{{ sucursal.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Filtro: Profesional -->
+    <div style="margin-bottom: 14px;">
+      <label style="display: block; font-size: 0.65rem; font-weight: 600; text-transform: uppercase; color: #999; margin-bottom: 4px; letter-spacing: 0.05em;">Profesional</label>
+      <select id="filtro-profesional" style="width: 100%; padding: 5px 8px; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 0.75rem; background: #fff; cursor: pointer;">
+        <option value="">Todos</option>
+        {% for prof in profesionales %}
+          <option value="{{ prof.id }}">{{ prof.nombres|truncatechars:15 }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Filtro: Estado de reserva (Dropdown) -->
+    <div style="margin-bottom: 14px;">
+      <label style="display: block; font-size: 0.65rem; font-weight: 600; text-transform: uppercase; color: #999; margin-bottom: 4px; letter-spacing: 0.05em;">Estado</label>
+      <select id="filtro-estado" style="width: 100%; padding: 5px 8px; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 0.75rem; background: #fff; cursor: pointer;">
+        <option value="">Todas</option>
+        <option value="confirmado">Confirmada</option>
+        <option value="pendiente">Pendiente</option>
+        <option value="reservado">Reservada</option>
+        <option value="en_espera">En espera</option>
+      </select>
+    </div>
+
+    <!-- Mini Calendario Inline -->
+    <div style="margin-top: 16px;">
+      <label style="display: block; font-size: 0.65rem; font-weight: 600; text-transform: uppercase; color: #999; margin-bottom: 6px; letter-spacing: 0.05em;">Navegación</label>
+      <div id="mini-calendar" class="mini-calendar"></div>
+    </div>
+
+  </div>
+
+  <!-- ── CALENDARIO PRINCIPAL ── -->
+  <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+
+    <!-- ── CALENDARIO ── -->
+    {% if not agenda_general %}
+      <div class="sin-horario">
     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:0.2;">
       <rect x="3" y="4" width="18" height="18" rx="2"/>
       <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
@@ -519,7 +830,12 @@
                  style="top:{{ ev.top_px }}px; height:{{ ev.height_px }}px;"
                  title="{{ ev.cita.paciente.nombres }} {{ ev.cita.paciente.apellidos }} · {{ ev.cita.servicio.nombre }}"
                  onclick="abrirDetalleCita({{ ev.cita.id }})">
-              <span class="ev-pago-icon">{% if ev.estado_pago == 'pagado' %}P{% elif ev.estado_pago == 'abonado' %}A{% endif %}</span>
+              <div style="display: flex; flex-direction: column; align-items: center; gap: 1px;">
+                <span class="ev-pago-icon {% if ev.estado_pago == 'pagado' %}pagado{% elif ev.estado_pago == 'abonado' %}abonado{% endif %}">{% if ev.estado_pago == 'pagado' %}P{% elif ev.estado_pago == 'abonado' %}A{% endif %}</span>
+                {% if ev.tiene_descuento_aprobado %}
+                <span style="font-size: 0.6rem; font-weight: 700; color: #fff; background: #16a34a; padding: 2px 5px; border-radius: 3px; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">🏷️</span>
+                {% endif %}
+              </div>
               <div class="ev-time">{{ ev.cita.hora_inicio|time:"H:i" }}–{% if ev.cita.hora_fin %}{{ ev.cita.hora_fin|time:"H:i" }}{% endif %}</div>
               <div class="ev-patient">{{ ev.cita.paciente.nombres }} {{ ev.cita.paciente.apellidos }}</div>
               {% if ev.height_px > 48 %}
@@ -536,6 +852,9 @@
   </table>
 </div>
 {% endif %}
+
+  </div><!-- FIN: Calendario principal -->
+</div><!-- FIN: Wrapper sidebar + calendario -->
 
 
 <!-- ══════════════════════════════════════════
@@ -693,6 +1012,9 @@
 
           <!-- Historial de pagos -->
           <div id="md-pagos-list"></div>
+
+          <!-- Descuentos -->
+          <div id="md-descuentos-container"></div>
 
           <!-- Botones rápidos de pago -->
           <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
@@ -1012,6 +1334,7 @@
     document.getElementById('md-pagado').textContent = d.monto_pagado_fmt;
     actualizarSaldo(d.saldo_pendiente, d.saldo_pendiente_fmt);
     renderPagos(d.pagos);
+    renderDescuentos(d.descuentos);
 
     const tieneSaldo = d.saldo_pendiente > 0;
     document.getElementById('md-btn-pago-total').style.display = tieneSaldo ? '' : 'none';
@@ -1079,11 +1402,57 @@
     pagos.forEach(p => {
       const item = document.createElement('div');
       item.className = 'md-pago-item';
+      let comprobantes = '';
+      if (p.voucher || p.boleta) {
+        comprobantes = '<div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px;">';
+        if (p.voucher) comprobantes += `Voucher: ${p.voucher} `;
+        if (p.boleta) comprobantes += `Boleta: ${p.boleta}`;
+        comprobantes += '</div>';
+      }
       item.innerHTML = `
-        <span><strong>${p.monto_fmt}</strong> <span class="metodo">· ${p.metodo} · ${p.fecha}</span></span>
+        <span>
+          <strong>${p.monto_fmt}</strong> <span class="metodo">· ${p.metodo} · ${p.fecha}</span>
+          ${comprobantes}
+        </span>
       `;
       list.appendChild(item);
     });
+  }
+
+  function renderDescuentos(descuentos) {
+    const container = document.getElementById('md-descuentos-container');
+    if (!container) return;
+
+    container.innerHTML = '';
+    if (!descuentos || descuentos.length === 0) return;
+
+    const section = document.createElement('div');
+    section.style.cssText = 'margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);';
+
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size: 0.85rem; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;';
+    title.textContent = 'Descuentos Aplicados';
+    section.appendChild(title);
+
+    descuentos.forEach(d => {
+      const item = document.createElement('div');
+      item.style.cssText = 'padding: 8px; background: var(--bg-main); border-radius: 6px; margin-bottom: 6px; font-size: 0.78rem;';
+
+      let icono = '';
+      if (d.estado === 'Pendiente de autorización') {
+        icono = '⚠️';
+      } else if (d.estado === 'Aprobado') {
+        icono = '✓';
+      }
+
+      item.innerHTML = `
+        ${icono} <strong>${d.tipo}</strong> · $${d.monto.toLocaleString('es-CL')}
+        <span style="color: var(--text-muted);">(${d.estado})</span>
+      `;
+      section.appendChild(item);
+    });
+
+    container.appendChild(section);
   }
 
   async function cambiarEstado(nuevoEstado) {
@@ -1365,17 +1734,9 @@
   });
 
   /* ─── DOMContentLoaded ───────────────────────────── */
-  window.addEventListener('DOMContentLoaded', () => {
-    const sel = document.getElementById('m-servicio');
-    if (sel && sel.value) actualizarInfoServicio(sel);
+  /* ─── SIDEBAR FILTERS ───────────────────────────── */
+  function actualizarFiltros() {
+    const params = new URLSearchParams();
 
-    {% if hora_now_top %}
-    const scroll = document.querySelector('.cal-scroll');
-    if (scroll) {
-      const target = {{ hora_now_top }} - (scroll.clientHeight / 2);
-      scroll.scrollTop = Math.max(0, target);
-    }
-    {% endif %}
-  });
-</script>
-{% endblock %}
+    // Mantener parámetros existentes
+    const fechaActua

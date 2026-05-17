@@ -21,6 +21,10 @@ from .models import (
     Paciente,
     Sucursal,
     Descuento,
+    Insumo,
+    ServicioInsumo,
+    EstructuraComision,
+    ComisionCalculada,
 )
 from .utils import obtener_agenda_completa
 
@@ -63,6 +67,10 @@ def dashboard(request):
 def agenda_view(request):
     fecha_param = request.GET.get('fecha')
     servicio_id = request.GET.get('servicio', '')
+    sucursal_id = request.GET.get('sucursal', '')
+    profesional_id = request.GET.get('profesional', '')
+    estados_param = request.GET.get('estados', '')
+
     fecha = date.today()
     if fecha_param:
         try:
@@ -70,9 +78,22 @@ def agenda_view(request):
         except ValueError:
             pass
 
+    # Parsear estados filtrados
+    estados_filtrados = [e.strip() for e in estados_param.split(',') if e.strip()] if estados_param else []
+
     profesionales = Profesional.objects.filter(activo=True)
+
+    # Filtrar por sucursal si se especifica
+    if sucursal_id:
+        profesionales = profesionales.filter(sucursal_principal__id=sucursal_id)
+
+    # Filtrar por profesional si se especifica
+    if profesional_id:
+        profesionales = profesionales.filter(id=profesional_id)
+
     servicios = Servicio.objects.filter(activo=True).select_related('unidad_negocio')
     pacientes = Paciente.objects.filter(activo=True).order_by('nombres', 'apellidos')
+    sucursales = Sucursal.objects.filter(activa=True).order_by('nombre')
 
     agenda_general = []
     horas_base = None
@@ -131,11 +152,23 @@ def agenda_view(request):
                     c = bloque['cita']
                     if c.id not in seen_citas:
                         seen_citas.add(c.id)
+
+                        # Filtrar por estados si se especificaron
+                        if estados_filtrados and c.estado not in estados_filtrados:
+                            continue
+
                         dur = c.servicio.duracion_minutos
+                        # Verificar si tiene descuentos aprobados
+                        tiene_desc_aprobado = Descuento.objects.filter(
+                            cita=c,
+                            estado='aprobado'
+                        ).exists()
+
                         citas_render.append({
                             'cita': c,
                             'estado_cita': c.estado,  # Color based on cita state
                             'estado_pago': bloque['estado'],  # Payment indicator (pagado/abonado/sin_pago)
+                            'tiene_descuento_aprobado': tiene_desc_aprobado,
                             'top_px': top_px,
                             'height_px': max((dur // 15) * SLOT_H, SLOT_H) - 3,
                         })
@@ -165,6 +198,8 @@ def agenda_view(request):
         "servicio_id": servicio_id,
         "servicios": servicios,
         "pacientes": pacientes,
+        "profesionales": profesionales,
+        "sucursales": sucursales,
         "total_height_px": total_height_px,
         "horas_labels": horas_labels,
         "hora_now_top": hora_now_top,
@@ -214,17 +249,50 @@ def detalle_cita(request, cita_id):
         id=cita_id
     )
     metodos_display = dict(Pago.METODOS_PAGO)
-    pagos = [
-        {
+
+    # Procesar pagos con extracción de voucher/boleta
+    pagos = []
+    for p in cita.pagos.all():
+        pago_data = {
             'id': p.id,
             'monto': p.monto,
             'monto_fmt': f"${p.monto:,}".replace(',', '.'),
             'metodo': metodos_display.get(p.metodo, p.metodo),
             'fecha': p.fecha.strftime('%d/%m/%Y %H:%M'),
             'observacion': p.observacion,
+            'voucher': None,
+            'boleta': None,
         }
-        for p in cita.pagos.all()
-    ]
+
+        # Extraer voucher y boleta del observación
+        if p.observacion:
+            obs = p.observacion
+            # Buscar Voucher
+            if 'Voucher:' in obs:
+                voucher_part = obs.split('Voucher:')[1].split('|')[0].strip()
+                pago_data['voucher'] = voucher_part
+            # Buscar Boleta
+            if 'Boleta:' in obs:
+                boleta_part = obs.split('Boleta:')[1].split('|')[0].strip()
+                pago_data['boleta'] = boleta_part
+
+        pagos.append(pago_data)
+
+    # Obtener descuentos
+    descuentos = []
+    for desc in cita.descuentos.all():
+        descuentos.append({
+            'id': desc.id,
+            'tipo': desc.get_tipo_display(),
+            'valor': desc.valor,
+            'monto': desc.monto_descuento,
+            'monto_fmt': f"${desc.monto_descuento:,}".replace(',', '.'),
+            'estado': desc.get_estado_display(),
+            'razon': desc.razon,
+            'solicitado_por': desc.solicitado_por,
+            'fecha_solicitud': desc.fecha_solicitud.strftime('%d/%m/%Y %H:%M') if desc.fecha_solicitud else None,
+        })
+
     return JsonResponse({
         'id': cita.id,
         'paciente': f"{cita.paciente.nombres} {cita.paciente.apellidos}",
@@ -249,6 +317,7 @@ def detalle_cita(request, cita_id):
         'saldo_pendiente_fmt': f"${cita.saldo_pendiente:,}".replace(',', '.'),
         'observaciones': cita.observaciones,
         'pagos': pagos,
+        'descuentos': descuentos,
     })
 
 
@@ -551,7 +620,14 @@ def guardar_horarios(request, profesional_id):
 # ── PROFESIONALES ─────────────────────────────────────────────────────────
 @login_required
 def profesionales_view(request):
-    profesionales = Profesional.objects.select_related('sucursal_principal').order_by('nombres')
+    profesionales = Profesional.objects.select_related('sucursal_principal').prefetch_related('estructuras_comision__unidad_negocio').order_by('nombres')
+
+    # Agregar información de unidad de negocio a cada profesional
+    for prof in profesionales:
+        # Obtener solo la PRIMERA unidad de negocio activa (la principal)
+        primera_unidad = prof.estructuras_comision.filter(activa=True).values_list('unidad_negocio__nombre', flat=True).first()
+        prof.unidad_negocio_display = primera_unidad if primera_unidad else '—'
+
     context = {
         'profesionales': profesionales,
         'total': profesionales.count(),
@@ -570,6 +646,12 @@ def editar_profesional(request, profesional_id):
         profesional.apellidos = request.POST.get('apellidos', '').strip()
         profesional.nombre_publico = request.POST.get('nombre_publico', '').strip()
         profesional.telefono = request.POST.get('telefono', '').strip()
+        profesional.rut = request.POST.get('rut', '').strip()
+
+        fecha_nacimiento = request.POST.get('fecha_nacimiento', '').strip()
+        if fecha_nacimiento:
+            profesional.fecha_nacimiento = fecha_nacimiento
+
         profesional.save()
 
         # Actualizar horarios
@@ -633,8 +715,109 @@ def editar_profesional(request, profesional_id):
     context = {
         'profesional': profesional,
         'horarios': horarios_config,
+        'estructuras_comision': profesional.estructuras_comision.all().order_by('fecha_inicio'),
+        'unidades': UnidadNegocio.objects.filter(activa=True),
+        'categorias': CategoriaServicio.objects.filter(activa=True),
     }
     return render(request, 'core/editar_profesional.html', context)
+
+
+@login_required
+def crear_estructura_comision(request, profesional_id):
+    if request.method != 'POST':
+        return redirect('editar_profesional', profesional_id=profesional_id)
+
+    profesional = get_object_or_404(Profesional, id=profesional_id)
+
+    try:
+        unidad_id = request.POST.get('unidad_negocio')
+        categoria_id = request.POST.get('categoria_servicio')
+        tipo_tributo = request.POST.get('tipo_tributo')
+        valor_comision = float(request.POST.get('valor_comision', 0))
+        fecha_inicio = request.POST.get('fecha_inicio')
+        fecha_fin = request.POST.get('fecha_fin') or None
+        vigencia_indefinida = request.POST.get('vigencia_indefinida') == 'on'
+        incluye_insumo = request.POST.get('incluye_insumo') == 'on'
+
+        unidad = get_object_or_404(UnidadNegocio, id=unidad_id)
+        categoria = get_object_or_404(CategoriaServicio, id=categoria_id)
+
+        EstructuraComision.objects.create(
+            profesional=profesional,
+            unidad_negocio=unidad,
+            categoria_servicio=categoria,
+            tipo_tributo=tipo_tributo,
+            valor_comision=int(valor_comision),
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin if not vigencia_indefinida else None,
+            vigencia_indefinida=vigencia_indefinida,
+            incluye_insumo=incluye_insumo,
+            activa=True,
+        )
+
+        messages.success(request, f'Estructura de comisión agregada para {categoria.nombre}.')
+    except Exception as e:
+        messages.error(request, f'Error al crear estructura: {e}')
+
+    return redirect('editar_profesional', profesional_id=profesional_id)
+
+
+@login_required
+def editar_estructura_comision(request, estructura_id):
+    if request.method != 'POST':
+        return redirect('profesionales')
+
+    estructura = get_object_or_404(EstructuraComision, id=estructura_id)
+
+    try:
+        unidad_id = request.POST.get('unidad_negocio')
+        categoria_id = request.POST.get('categoria_servicio')
+        tipo_tributo = request.POST.get('tipo_tributo')
+        valor_comision = float(request.POST.get('valor_comision', 0))
+        fecha_inicio = request.POST.get('fecha_inicio')
+        fecha_fin = request.POST.get('fecha_fin') or None
+        vigencia_indefinida = request.POST.get('vigencia_indefinida') == 'on'
+        incluye_insumo = request.POST.get('incluye_insumo') == 'on'
+
+        unidad = get_object_or_404(UnidadNegocio, id=unidad_id)
+        categoria = get_object_or_404(CategoriaServicio, id=categoria_id)
+
+        estructura.unidad_negocio = unidad
+        estructura.categoria_servicio = categoria
+        estructura.tipo_tributo = tipo_tributo
+        estructura.valor_comision = int(valor_comision)
+        estructura.fecha_inicio = fecha_inicio
+        estructura.fecha_fin = fecha_fin if not vigencia_indefinida else None
+        estructura.vigencia_indefinida = vigencia_indefinida
+        estructura.incluye_insumo = incluye_insumo
+        estructura.save()
+
+        messages.success(request, f'Estructura de comisión actualizada para {categoria.nombre}.')
+    except Exception as e:
+        messages.error(request, f'Error al actualizar estructura: {e}')
+
+    return redirect('editar_profesional', profesional_id=estructura.profesional.id)
+
+
+@login_required
+def eliminar_estructura_comision(request, estructura_id):
+    if request.method != 'POST':
+        return redirect('profesionales')
+
+    try:
+        estructura = EstructuraComision.objects.get(id=estructura_id)
+        profesional_id = estructura.profesional.id
+        categoria_nombre = estructura.categoria_servicio.nombre
+
+        estructura.delete()
+        messages.success(request, f'Estructura de comisión de {categoria_nombre} eliminada.')
+        return redirect('editar_profesional', profesional_id=profesional_id)
+    except EstructuraComision.DoesNotExist:
+        messages.error(request, f'La estructura de comisión no existe.')
+        return redirect('profesionales')
+    except Exception as e:
+        messages.error(request, f'Error al eliminar estructura: {str(e)}')
+        return redirect('profesionales')
 
 
 @login_required
@@ -649,6 +832,228 @@ def toggle_profesional(request, profesional_id):
     return redirect('profesionales')
 
 
+# ── INSUMOS ───────────────────────────────────────────────────────────────
+@login_required
+def insumos_view(request):
+    insumos = Insumo.objects.select_related('unidad_negocio').order_by('nombre')
+    context = {
+        'insumos': insumos,
+        'unidades': UnidadNegocio.objects.filter(activa=True),
+    }
+    return render(request, 'core/insumos.html', context)
+
+
+@login_required
+def crear_insumo(request):
+    if request.method != 'POST':
+        return redirect('insumos')
+    try:
+        unidad = get_object_or_404(UnidadNegocio, id=request.POST.get('unidad_negocio'))
+        nombre = request.POST.get('nombre', '').strip()
+        codigo_sku = request.POST.get('codigo_sku', '').strip()
+
+        if not nombre:
+            messages.error(request, 'El nombre del insumo es requerido.')
+            return redirect('insumos')
+
+        costo = int(request.POST.get('costo_unitario', '0').replace('.', '').replace(',', ''))
+        precio = int(request.POST.get('precio_venta', '0').replace('.', '').replace(',', ''))
+        cantidad = int(request.POST.get('cantidad_disponible', '0'))
+        unidad_medida = request.POST.get('unidad', 'und')
+
+        insumo = Insumo.objects.create(
+            unidad_negocio=unidad,
+            nombre=nombre,
+            codigo_sku=codigo_sku,
+            costo_unitario=costo,
+            precio_venta=precio,
+            cantidad_disponible=cantidad,
+            unidad=unidad_medida,
+            activo=True,
+        )
+        messages.success(request, f'Insumo "{insumo.nombre}" creado.')
+    except Exception as e:
+        messages.error(request, f'Error al crear insumo: {e}')
+    return redirect('insumos')
+
+
+@login_required
+def editar_insumo(request, insumo_id):
+    insumo = get_object_or_404(Insumo, id=insumo_id)
+
+    if request.method == 'POST':
+        try:
+            nombre = request.POST.get('nombre', '').strip()
+            if not nombre:
+                messages.error(request, 'El nombre del insumo es requerido.')
+                return redirect('insumos')
+
+            unidad_id = request.POST.get('unidad_negocio')
+            if unidad_id:
+                insumo.unidad_negocio = get_object_or_404(UnidadNegocio, id=unidad_id)
+
+            insumo.nombre = nombre
+            insumo.codigo_sku = request.POST.get('codigo_sku', '').strip()
+            insumo.costo_unitario = int(request.POST.get('costo_unitario', '0').replace('.', '').replace(',', ''))
+            insumo.precio_venta = int(request.POST.get('precio_venta', '0').replace('.', '').replace(',', ''))
+            insumo.cantidad_disponible = int(request.POST.get('cantidad_disponible', '0'))
+            insumo.unidad = request.POST.get('unidad', 'und')
+            insumo.save()
+
+            messages.success(request, f'Insumo "{insumo.nombre}" actualizado.')
+        except Exception as e:
+            messages.error(request, f'Error al editar insumo: {e}')
+        return redirect('insumos')
+
+    context = {
+        'insumo': insumo,
+        'unidades': UnidadNegocio.objects.filter(activa=True),
+        'editing': True,
+    }
+    return render(request, 'core/insumos.html', context)
+
+
+@login_required
+def toggle_insumo(request, insumo_id):
+    if request.method != 'POST':
+        return redirect('insumos')
+    i = get_object_or_404(Insumo, id=insumo_id)
+    i.activo = not i.activo
+    i.save()
+    estado = 'activado' if i.activo else 'desactivado'
+    messages.success(request, f'Insumo "{i.nombre}" {estado}.')
+    return redirect('insumos')
+
+
+@login_required
+def eliminar_insumo(request, insumo_id):
+    if request.method != 'POST':
+        return redirect('insumos')
+
+    insumo = get_object_or_404(Insumo, id=insumo_id)
+    nombre_insumo = insumo.nombre
+
+    try:
+        if insumo.servicios_usados.exists():
+            messages.error(request, f'No se puede eliminar "{nombre_insumo}" porque está asignado a servicios.')
+        else:
+            insumo.delete()
+            messages.success(request, f'Insumo "{nombre_insumo}" eliminado correctamente.')
+    except Exception as e:
+        messages.error(request, f'Error al eliminar insumo: {e}')
+
+    return redirect('insumos')
+
+
+# ── CATEGORÍAS DE SERVICIO ────────────────────────────────────────────────
+@login_required
+def categorias_view(request):
+    categorias = CategoriaServicio.objects.select_related('unidad_negocio').order_by('nombre')
+    context = {
+        'categorias': categorias,
+        'unidades': UnidadNegocio.objects.filter(activa=True),
+    }
+    return render(request, 'core/categorias.html', context)
+
+
+@login_required
+def crear_categoria(request):
+    if request.method != 'POST':
+        return redirect('categorias')
+    try:
+        unidad = get_object_or_404(UnidadNegocio, id=request.POST.get('unidad_negocio'))
+        nombre = request.POST.get('nombre', '').strip()
+
+        if not nombre:
+            messages.error(request, 'El nombre de la categoría es requerido.')
+            return redirect('categorias')
+
+        # Verificar que no existe con el mismo nombre en la misma unidad
+        if CategoriaServicio.objects.filter(nombre=nombre, unidad_negocio=unidad).exists():
+            messages.error(request, f'Ya existe una categoría "{nombre}" en esta unidad de negocio.')
+            return redirect('categorias')
+
+        categoria = CategoriaServicio.objects.create(
+            unidad_negocio=unidad,
+            nombre=nombre,
+            activa=True,
+        )
+        messages.success(request, f'Categoría "{categoria.nombre}" creada.')
+    except Exception as e:
+        messages.error(request, f'Error al crear la categoría: {e}')
+    return redirect('categorias')
+
+
+@login_required
+def editar_categoria(request, categoria_id):
+    categoria = get_object_or_404(CategoriaServicio, id=categoria_id)
+
+    if request.method == 'POST':
+        try:
+            nombre = request.POST.get('nombre', '').strip()
+
+            if not nombre:
+                messages.error(request, 'El nombre de la categoría es requerido.')
+                return redirect('categorias')
+
+            # Verificar que no existe otro con el mismo nombre en la misma unidad
+            if CategoriaServicio.objects.filter(nombre=nombre, unidad_negocio=categoria.unidad_negocio).exclude(id=categoria.id).exists():
+                messages.error(request, f'Ya existe una categoría "{nombre}" en esta unidad de negocio.')
+                return redirect('categorias')
+
+            # Actualizar unidad de negocio si se envía
+            unidad_id = request.POST.get('unidad_negocio')
+            if unidad_id:
+                categoria.unidad_negocio = get_object_or_404(UnidadNegocio, id=unidad_id)
+
+            categoria.nombre = nombre
+            categoria.save()
+            messages.success(request, f'Categoría "{categoria.nombre}" actualizada.')
+        except Exception as e:
+            messages.error(request, f'Error al editar la categoría: {e}')
+        return redirect('categorias')
+
+    context = {
+        'categoria': categoria,
+        'unidades': UnidadNegocio.objects.filter(activa=True),
+        'editing': True,
+    }
+    return render(request, 'core/categorias.html', context)
+
+
+@login_required
+def toggle_categoria(request, categoria_id):
+    if request.method != 'POST':
+        return redirect('categorias')
+    c = get_object_or_404(CategoriaServicio, id=categoria_id)
+    c.activa = not c.activa
+    c.save()
+    estado = 'activada' if c.activa else 'desactivada'
+    messages.success(request, f'Categoría "{c.nombre}" {estado}.')
+    return redirect('categorias')
+
+
+@login_required
+def eliminar_categoria(request, categoria_id):
+    if request.method != 'POST':
+        return redirect('categorias')
+
+    categoria = get_object_or_404(CategoriaServicio, id=categoria_id)
+    nombre_categoria = categoria.nombre
+
+    try:
+        # Verificar si tiene servicios asociados
+        if categoria.servicios.exists():
+            messages.error(request, f'No se puede eliminar "{nombre_categoria}" porque tiene servicios asociados.')
+        else:
+            categoria.delete()
+            messages.success(request, f'Categoría "{nombre_categoria}" eliminada correctamente.')
+    except Exception as e:
+        messages.error(request, f'Error al eliminar la categoría: {e}')
+
+    return redirect('categorias')
+
+
 # ── SERVICIOS ─────────────────────────────────────────────────────────────
 @login_required
 def servicios_view(request):
@@ -658,6 +1063,7 @@ def servicios_view(request):
         'unidades': UnidadNegocio.objects.filter(activa=True),
         'categorias': CategoriaServicio.objects.filter(activa=True),
         'profesionales': Profesional.objects.filter(activo=True),
+        'insumos': Insumo.objects.all(),
     }
     return render(request, 'core/servicios.html', context)
 
@@ -690,10 +1096,88 @@ def crear_servicio(request):
         prof_ids = request.POST.getlist('profesionales')
         if prof_ids:
             servicio.profesionales.set(Profesional.objects.filter(id__in=prof_ids))
+
+        # Agregar insumos
+        insumo_ids = request.POST.getlist('insumos')
+        if insumo_ids:
+            for insumo_id in insumo_ids:
+                try:
+                    insumo = Insumo.objects.get(id=insumo_id)
+                    ServicioInsumo.objects.create(servicio=servicio, insumo=insumo)
+                except Insumo.DoesNotExist:
+                    pass
+
         messages.success(request, f'Servicio "{servicio.nombre}" creado.')
     except Exception as e:
         messages.error(request, f'Error al crear el servicio: {e}')
     return redirect('servicios')
+
+
+@login_required
+def editar_servicio(request, servicio_id):
+    servicio = get_object_or_404(Servicio, id=servicio_id)
+
+    if request.method == 'POST':
+        try:
+            servicio.nombre = request.POST.get('nombre', servicio.nombre)
+            servicio.descripcion = request.POST.get('descripcion', '')
+
+            # Actualizar unidad de negocio
+            unidad_id = request.POST.get('unidad_negocio')
+            if unidad_id:
+                servicio.unidad_negocio = UnidadNegocio.objects.filter(id=unidad_id).first()
+
+            # Actualizar categoría
+            cat_id = request.POST.get('categoria')
+            if cat_id:
+                servicio.categoria = CategoriaServicio.objects.filter(id=cat_id).first()
+
+            precio_str = request.POST.get('precio', str(servicio.precio))
+            servicio.precio = int(precio_str.replace('.', '').replace(',', ''))
+
+            servicio.duracion_minutos = int(request.POST.get('duracion_minutos', servicio.duracion_minutos))
+            servicio.requiere_seguimiento = request.POST.get('requiere_seguimiento') == 'on'
+
+            dias_seg = request.POST.get('dias_seguimiento')
+            servicio.dias_seguimiento = int(dias_seg) if dias_seg else None
+
+            servicio.save()
+
+            # Actualizar profesionales
+            prof_ids = request.POST.getlist('profesionales')
+            if prof_ids:
+                servicio.profesionales.set(Profesional.objects.filter(id__in=prof_ids))
+            else:
+                servicio.profesionales.clear()
+
+            # Actualizar insumos
+            insumo_ids = request.POST.getlist('insumos')
+            # Limpiar insumos previos
+            servicio.insumos_usados.all().delete()
+            # Agregar nuevos insumos
+            if insumo_ids:
+                for insumo_id in insumo_ids:
+                    try:
+                        insumo = Insumo.objects.get(id=insumo_id)
+                        ServicioInsumo.objects.create(servicio=servicio, insumo=insumo)
+                    except Insumo.DoesNotExist:
+                        pass
+
+            messages.success(request, f'Servicio "{servicio.nombre}" actualizado.')
+            return redirect('servicios')
+        except Exception as e:
+            messages.error(request, f'Error al actualizar servicio: {e}')
+
+    context = {
+        'servicio': servicio,
+        'servicio_prof_ids': list(servicio.profesionales.values_list('id', flat=True)),
+        'servicio_insumo_ids': list(servicio.insumos_usados.values_list('insumo_id', flat=True)),
+        'unidades': UnidadNegocio.objects.filter(activa=True),
+        'categorias': CategoriaServicio.objects.filter(activa=True),
+        'profesionales': Profesional.objects.filter(activo=True),
+        'insumos': Insumo.objects.all(),
+    }
+    return render(request, 'core/editar_servicio.html', context)
 
 
 @login_required
@@ -705,6 +1189,23 @@ def toggle_servicio(request, servicio_id):
     s.save()
     estado = 'activado' if s.activo else 'desactivado'
     messages.success(request, f'Servicio "{s.nombre}" {estado}.')
+    return redirect('servicios')
+
+
+@login_required
+def eliminar_servicio(request, servicio_id):
+    if request.method != 'POST':
+        return redirect('servicios')
+
+    servicio = get_object_or_404(Servicio, id=servicio_id)
+    nombre_servicio = servicio.nombre
+
+    try:
+        servicio.delete()
+        messages.success(request, f'Servicio "{nombre_servicio}" eliminado correctamente.')
+    except Exception as e:
+        messages.error(request, f'Error al eliminar servicio: {e}')
+
     return redirect('servicios')
 
 
@@ -798,3 +1299,512 @@ def actualizar_seguimiento(request, seguimiento_id):
 @login_required
 def marcar_seguimiento_contactado(request, seguimiento_id):
     return actualizar_seguimiento(request, seguimiento_id)
+
+
+# ── DESCUENTOS Y AUTORIZACIONES ───────────────────────────────────────────────
+
+@login_required
+def descuentos_pendientes_view(request):
+    """Vista admin para autorizar/rechazar descuentos pendientes"""
+    if not request.user.is_staff:
+        return redirect('dashboard')
+
+    descuentos = Descuento.objects.filter(
+        estado='pendiente'
+    ).select_related('cita__paciente', 'cita__servicio').order_by('-fecha_solicitud')
+
+    context = {
+        'descuentos': descuentos,
+        'total': descuentos.count(),
+    }
+    return render(request, 'core/descuentos_pendientes.html', context)
+
+
+@login_required
+def autorizar_descuento(request, descuento_id):
+    """AJAX endpoint para autorizar o rechazar descuentos"""
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'No autorizado'}, status=403)
+
+    try:
+        descuento = get_object_or_404(Descuento, id=descuento_id)
+        accion = request.POST.get('accion')
+
+        if accion == 'aprobar':
+            descuento.estado = 'aprobado'
+            estado_msg = 'Aprobado'
+        elif accion == 'rechazar':
+            descuento.estado = 'rechazado'
+            motivo_rechazo = request.POST.get('razon', '')
+            estado_msg = 'Rechazado'
+            if motivo_rechazo:
+                descuento.razon = f"[RECHAZO] {motivo_rechazo}"
+
+        descuento.autorizado_por = request.user.get_full_name() or request.user.username
+        descuento.fecha_autorizacion = datetime.now()
+        descuento.save()
+
+        # Enviar notificación al que solicitó
+        try:
+            asunto = f"Descuento {estado_msg.lower()} - {descuento.cita.paciente.nombres}"
+
+            # Mensaje base
+            mensaje = f"""
+Hola,
+
+El descuento que solicitaste ha sido {estado_msg.lower()}:
+
+📋 Paciente: {descuento.cita.paciente.nombres} {descuento.cita.paciente.apellidos}
+💰 Monto: ${descuento.monto_descuento:,}
+✅ Autorizado por: {descuento.autorizado_por}
+"""
+
+            # Agregar motivo de rechazo si aplica
+            if descuento.estado == 'rechazado' and descuento.razon:
+                motivo = descuento.razon.replace('[RECHAZO] ', '')
+                mensaje += f"\n❌ Motivo: {motivo}\n"
+
+            mensaje += """
+Saludos,
+Sistema de Gestión Clínica
+"""
+            send_mail(
+                asunto,
+                mensaje,
+                settings.DEFAULT_FROM_EMAIL,
+                [request.user.email] if request.user.email else [],
+                fail_silently=True
+            )
+        except Exception as e:
+            print(f"Error al enviar email de notificación: {e}")
+
+        return JsonResponse({'ok': True, 'estado': descuento.get_estado_display()})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@login_required
+def autorizaciones_view(request):
+    """Vista del dashboard de autorizaciones de descuentos"""
+    hoy = date.today()
+    # Mostrar todas las autorizaciones (pendientes y aprobadas) ordenadas por fecha descendente
+    autorizaciones = Descuento.objects.select_related(
+        'cita__paciente', 'cita__servicio'
+    ).order_by('-fecha_solicitud')
+
+    # Separar en pendientes y procesadas
+    pendientes = autorizaciones.filter(estado='pendiente')
+    aprobadas = autorizaciones.filter(estado='aprobado')
+    rechazadas = autorizaciones.filter(estado='rechazado')
+
+    context = {
+        'hoy': hoy,
+        'autorizaciones': autorizaciones,
+        'pendientes': pendientes,
+        'total_pendientes': pendientes.count(),
+        'total_aprobadas': aprobadas.count(),
+        'total_rechazadas': rechazadas.count(),
+        'user_is_staff': request.user.is_staff,
+    }
+    return render(request, 'core/autorizaciones.html', context)
+
+
+# ── COMISIONES Y VENTAS ───────────────────────────────────────────────────────
+
+from django.db.models import Sum, Count, Q, F, DecimalField
+from django.db.models.functions import Coalesce
+
+def calcular_costo_insumos_cita(cita):
+    """Calcula el costo total de insumos para una cita"""
+    from .models import ServicioInsumo
+    costo_total = 0
+    insumos = ServicioInsumo.objects.filter(servicio=cita.servicio)
+    for si in insumos:
+        costo_total += int(float(si.cantidad_usada) * si.insumo.costo_unitario)
+    return costo_total
+
+
+def obtener_descuentos_aprobados_cita(cita):
+    """Obtiene el monto total de descuentos aprobados para una cita"""
+    descuentos = Descuento.objects.filter(cita=cita, estado='aprobado')
+    total = sum(d.monto_descuento for d in descuentos)
+    return total
+
+
+def calcular_comision_cita(cita, estructura_comision):
+    """
+    Calcula la comisión para una cita basada en su estructura
+
+    Fórmula: (monto_ingresos_brutos - costo_insumos - descuentos) * (porcentaje_comision / 100)
+    """
+    # Obtener ingresos brutos (lo que el paciente pagó o debe pagar)
+    monto_bruto = cita.monto_total
+
+    # Obtener costo de insumos
+    costo_insumos = calcular_costo_insumos_cita(cita)
+
+    # Obtener descuentos aprobados
+    monto_descuentos = obtener_descuentos_aprobados_cita(cita)
+
+    # Calcular neto
+    monto_neto = monto_bruto - costo_insumos - monto_descuentos
+
+    # Aplicar porcentaje de comisión
+    if estructura_comision.tipo_comision == 'porcentaje':
+        porcentaje = estructura_comision.valor_comision
+        monto_comision = int(monto_neto * (porcentaje / 100))
+    elif estructura_comision.tipo_comision == 'sociedad_carro':
+        porcentaje = estructura_comision.valor_comision
+        monto_comision = int(monto_neto * (porcentaje / 100))
+    elif estructura_comision.tipo_comision == 'clinica_salud_70_30':
+        # 70% al profesional, 30% a la clínica
+        monto_comision = int(monto_neto * 0.70)
+        porcentaje = 70
+    else:
+        porcentaje = 0
+        monto_comision = 0
+
+    return {
+        'monto_bruto': monto_bruto,
+        'costo_insumos': costo_insumos,
+        'monto_descuentos': monto_descuentos,
+        'monto_neto': monto_neto,
+        'monto_comision': monto_comision,
+        'porcentaje': porcentaje,
+    }
+
+
+@login_required
+def comisiones_profesional_view(request):
+    """Dashboard de comisiones para un profesional"""
+    # Si es staff, puede ver todas las comisiones; si no, solo ve las suyas
+    if request.user.is_staff:
+        profesional_id = request.GET.get('profesional')
+        if profesional_id:
+            profesional = get_object_or_404(Profesional, id=profesional_id)
+        else:
+            # Mostrar lista de profesionales
+            profesionales = Profesional.objects.filter(activo=True)
+            context = {
+                'profesionales': profesionales,
+                'mode': 'lista'
+            }
+            return render(request, 'core/comisiones.html', context)
+    else:
+        # Profesional regular ve solo sus datos
+        try:
+            profesional = Profesional.objects.get(
+                email=request.user.email
+            )
+        except Profesional.DoesNotExist:
+            messages.error(request, 'No hay perfil de profesional asociado a tu cuenta.')
+            return redirect('dashboard')
+
+    # Mes solicitado (por defecto mes actual)
+    mes_str = request.GET.get('mes', '')
+    if not mes_str:
+        hoy = date.today()
+        mes_str = hoy.strftime('%Y-%m')
+
+    # Obtener citas del profesional en ese mes
+    try:
+        fecha_inicio = datetime.strptime(mes_str, '%Y-%m').date()
+        fecha_fin = (fecha_inicio + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+    except ValueError:
+        fecha_inicio = date.today().replace(day=1)
+        fecha_fin = (date.today() + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        mes_str = fecha_inicio.strftime('%Y-%m')
+
+    citas = Cita.objects.filter(
+        profesional=profesional,
+        fecha__range=[fecha_inicio, fecha_fin],
+        estado__in=['confirmado', 'asistio']  # Solo citas completadas
+    ).select_related('servicio', 'paciente', 'servicio__unidad_negocio')
+
+    # Obtener estructura de comisión vigente
+    estructura = EstructuraComision.objects.filter(
+        profesional=profesional,
+        activa=True,
+        fecha_inicio__lte=fecha_fin,
+        fecha_fin__isnull=True
+    ).first()
+
+    if not estructura:
+        # Buscar por unidad de negocio o alguna genérica
+        estructura = EstructuraComision.objects.filter(
+            profesional=profesional,
+            activa=True,
+            fecha_inicio__lte=fecha_fin
+        ).order_by('-fecha_inicio').first()
+
+    # Procesar citas y calcular comisiones
+    citas_data = []
+    total_ingresos = 0
+    total_insumos = 0
+    total_descuentos = 0
+    total_neto = 0
+    total_comision = 0
+    cantidad_citas = 0
+
+    for cita in citas:
+        comision_data = calcular_comision_cita(cita, estructura) if estructura else {}
+
+        cita_data = {
+            'cita': cita,
+            'fecha': cita.fecha,
+            'paciente': cita.paciente,
+            'servicio': cita.servicio,
+            **comision_data
+        }
+        citas_data.append(cita_data)
+
+        total_ingresos += comision_data.get('monto_bruto', 0)
+        total_insumos += comision_data.get('costo_insumos', 0)
+        total_descuentos += comision_data.get('monto_descuentos', 0)
+        total_neto += comision_data.get('monto_neto', 0)
+        total_comision += comision_data.get('monto_comision', 0)
+        cantidad_citas += 1
+
+    # Agrupar por servicio para análisis de rentabilidad
+    servicios_stats = {}
+    for cita_data in citas_data:
+        servicio_nombre = cita_data['servicio'].nombre
+        if servicio_nombre not in servicios_stats:
+            servicios_stats[servicio_nombre] = {
+                'cantidad': 0,
+                'ingresos': 0,
+                'insumos': 0,
+                'comision': 0,
+                'rentabilidad_promedio': 0,
+            }
+
+        servicios_stats[servicio_nombre]['cantidad'] += 1
+        servicios_stats[servicio_nombre]['ingresos'] += cita_data.get('monto_bruto', 0)
+        servicios_stats[servicio_nombre]['insumos'] += cita_data.get('costo_insumos', 0)
+        servicios_stats[servicio_nombre]['comision'] += cita_data.get('monto_comision', 0)
+
+    # Calcular rentabilidad promedio por servicio
+    for servicio in servicios_stats:
+        ingresos = servicios_stats[servicio]['ingresos']
+        if ingresos > 0:
+            servicios_stats[servicio]['rentabilidad_promedio'] = (
+                servicios_stats[servicio]['comision'] / ingresos
+            ) * 100
+
+    context = {
+        'profesional': profesional,
+        'mes': mes_str,
+        'fecha_inicio': fecha_inicio,
+        'fecha_fin': fecha_fin,
+        'estructura_comision': estructura,
+        'citas_data': citas_data,
+        'cantidad_citas': cantidad_citas,
+        'total_ingresos': total_ingresos,
+        'total_insumos': total_insumos,
+        'total_descuentos': total_descuentos,
+        'total_neto': total_neto,
+        'total_comision': total_comision,
+        'servicios_stats': servicios_stats,
+        'promedio_comision_por_cita': total_comision // cantidad_citas if cantidad_citas > 0 else 0,
+    }
+
+    return render(request, 'core/comisiones.html', context)
+
+
+@login_required
+def comisiones_proyeccion_view(request):
+    """Vista de simulación y proyección de comisiones"""
+    if request.user.is_staff:
+        profesional_id = request.GET.get('profesional')
+        if profesional_id:
+            profesional = get_object_or_404(Profesional, id=profesional_id)
+        else:
+            profesionales = Profesional.objects.filter(activo=True)
+            context = {'profesionales': profesionales, 'mode': 'lista'}
+            return render(request, 'core/comisiones_proyeccion.html', context)
+    else:
+        try:
+            profesional = Profesional.objects.get(email=request.user.email)
+        except Profesional.DoesNotExist:
+            messages.error(request, 'No hay perfil de profesional asociado.')
+            return redirect('dashboard')
+
+    # Obtener estructura actual
+    estructura = EstructuraComision.objects.filter(
+        profesional=profesional,
+        activa=True
+    ).order_by('-fecha_inicio').first()
+
+    if not estructura:
+        messages.error(request, 'No hay estructura de comisión definida.')
+        return redirect('dashboard')
+
+    # Datos para simulación
+    servicios = Servicio.objects.filter(
+        activo=True,
+        profesionales=profesional
+    ).select_related('unidad_negocio')
+
+    # Calcular datos históricos (últimos 3 meses)
+    hoy = date.today()
+    hace_3_meses = hoy - timedelta(days=90)
+
+    citas_históricas = Cita.objects.filter(
+        profesional=profesional,
+        fecha__gte=hace_3_meses,
+        estado__in=['confirmado', 'asistio']
+    ).select_related('servicio')
+
+    # Agrupar por servicio
+    servicios_historico = {}
+    for cita in citas_históricas:
+        s = cita.servicio
+        if s.id not in servicios_historico:
+            servicios_historico[s.id] = {
+                'nombre': s.nombre,
+                'cantidad': 0,
+                'ingresos_promedio': 0,
+                'total_ingresos': 0,
+            }
+        servicios_historico[s.id]['cantidad'] += 1
+        servicios_historico[s.id]['total_ingresos'] += s.precio
+
+    for s_id in servicios_historico:
+        if servicios_historico[s_id]['cantidad'] > 0:
+            servicios_historico[s_id]['ingresos_promedio'] = (
+                servicios_historico[s_id]['total_ingresos'] / servicios_historico[s_id]['cantidad']
+            )
+
+    context = {
+        'profesional': profesional,
+        'estructura_comision': estructura,
+        'servicios': servicios,
+        'servicios_historico': servicios_historico,
+    }
+
+    return render(request, 'core/comisiones_proyeccion.html', context)
+
+
+@login_required
+def comisiones_todas_view(request):
+    """Vista consolidada de TODAS las comisiones (solo para staff/admin)"""
+    if not request.user.is_staff:
+        messages.error(request, 'No tienes permiso para acceder a esta vista.')
+        return redirect('comisiones')
+
+    # Parámetros de filtro
+    fecha_inicio_param = request.GET.get('fecha_inicio', '')
+    fecha_fin_param = request.GET.get('fecha_fin', '')
+    profesional_id = request.GET.get('profesional', '')
+    unidad_negocio_id = request.GET.get('unidad_negocio', '')
+
+    # Determinar rango de fechas
+    hoy = date.today()
+    if fecha_inicio_param and fecha_fin_param:
+        try:
+            fecha_inicio = datetime.strptime(fecha_inicio_param, "%Y-%m-%d").date()
+            fecha_fin = datetime.strptime(fecha_fin_param, "%Y-%m-%d").date()
+        except:
+            fecha_inicio = hoy.replace(day=1)
+            fecha_fin = (fecha_inicio + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+    else:
+        fecha_inicio = hoy.replace(day=1)
+        fecha_fin = (fecha_inicio + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+
+    # Filtrar profesionales
+    profesionales_qs = Profesional.objects.filter(activo=True)
+    if profesional_id:
+        profesionales_qs = profesionales_qs.filter(id=profesional_id)
+
+    # Datos consolidados
+    datos_comisiones = []
+    total_citas = 0
+    total_ingresos_general = 0
+    total_insumos_general = 0
+    total_descuentos_general = 0
+    total_neto_general = 0
+    total_comision_general = 0
+
+    for prof in profesionales_qs:
+        # Citas del profesional en el período
+        citas_query = Cita.objects.filter(
+            profesional=prof,
+            fecha__range=[fecha_inicio, fecha_fin],
+            estado__in=['confirmado', 'asistio']
+        ).select_related('servicio', 'servicio__unidad_negocio')
+
+        # Filtro por unidad de negocio si aplica
+        if unidad_negocio_id:
+            citas_query = citas_query.filter(servicio__unidad_negocio_id=unidad_negocio_id)
+
+        citas = citas_query
+
+        if not citas.exists():
+            continue
+
+        # Estructura de comisión del profesional
+        estructura = EstructuraComision.objects.filter(
+            profesional=prof,
+            activa=True,
+            fecha_inicio__lte=fecha_fin
+        ).order_by('-fecha_inicio').first()
+
+        # Calcular montos
+        monto_ingresos = 0
+        monto_insumos = 0
+        monto_descuentos = 0
+        monto_neto = 0
+        monto_comision = 0
+        cantidad_citas = len(citas)
+
+        for cita in citas:
+            comision_data = calcular_comision_cita(cita, estructura) if estructura else {}
+            monto_ingresos += comision_data.get('monto_bruto', 0)
+            monto_insumos += comision_data.get('costo_insumos', 0)
+            monto_descuentos += comision_data.get('monto_descuentos', 0)
+            monto_neto += comision_data.get('monto_neto', 0)
+            monto_comision += comision_data.get('monto_comision', 0)
+
+        # Calcular porcentaje de comisión
+        porcentaje_comision = (monto_comision / monto_ingresos * 100) if monto_ingresos > 0 else 0
+
+        datos_comisiones.append({
+            'profesional': prof,
+            'estructura': estructura,
+            'cantidad_citas': cantidad_citas,
+            'monto_ingresos': monto_ingresos,
+            'monto_insumos': monto_insumos,
+            'monto_descuentos': monto_descuentos,
+            'monto_neto': monto_neto,
+            'monto_comision': monto_comision,
+            'porcentaje_comision': porcentaje_comision,
+        })
+
+        total_citas += cantidad_citas
+        total_ingresos_general += monto_ingresos
+        total_insumos_general += monto_insumos
+        total_descuentos_general += monto_descuentos
+        total_neto_general += monto_neto
+        total_comision_general += monto_comision
+
+    # Lista de profesionales para filtro
+    profesionales_list = Profesional.objects.filter(activo=True).order_by('nombres')
+    unidades_negocio = UnidadNegocio.objects.filter(activa=True)
+
+    context = {
+        'datos_comisiones': datos_comisiones,
+        'total_citas': total_citas,
+        'total_ingresos_general': total_ingresos_general,
+        'total_insumos_general': total_insumos_general,
+        'total_descuentos_general': total_descuentos_general,
+        'total_neto_general': total_neto_general,
+        'total_comision_general': total_comision_general,
+        'fecha_inicio': fecha_inicio,
+        'fecha_fin': fecha_fin,
+        'profesionales_filter': profesionales_list,
+        'unidades_negocio_filter': unidades_negocio,
+        'profesional_selected': profesional_id,
+        'unidad_selected': unidad_negocio_id,
+    }
+
+    return render(request, 'core/comisiones_todas.html', context)

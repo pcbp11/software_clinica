@@ -1,0 +1,486 @@
+{% extends "core/base.html" %}
+
+{% block title %}Todas las Comisiones{% endblock %}
+{% block page_title %}Todas las Comisiones{% endblock %}
+{% block page_subtitle %}Análisis consolidado de comisiones de todos los profesionales{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'agenda' %}" class="btn btn-primary">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+      <rect x="3" y="4" width="18" height="18" rx="2"/>
+      <line x1="16" y1="2" x2="16" y2="6"/>
+      <line x1="8" y1="2" x2="8" y2="6"/>
+      <line x1="3" y1="10" x2="21" y2="10"/>
+    </svg>
+    Ir a agenda
+  </a>
+{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
+<style>
+  .filtro-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+
+  .filtro-group {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+
+  .filtro-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .filtro-item label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .filtro-item input,
+  .filtro-item select {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.9rem;
+    background: white;
+    color: var(--text-primary);
+  }
+
+  .resumen-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .resumen-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+  }
+
+  .resumen-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .resumen-valor {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tabla-comisiones {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .tabla-header {
+    background: var(--bg-secondary);
+    padding: 12px 16px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    display: grid;
+    grid-template-columns: 2fr 0.8fr 1fr 1fr 1fr 1fr 1.2fr 0.8fr;
+    gap: 16px;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+  }
+
+  .tabla-header > div:nth-child(n+2) {
+    text-align: right;
+  }
+
+  .tabla-row {
+    padding: 12px 16px;
+    display: grid;
+    grid-template-columns: 2fr 0.8fr 1fr 1fr 1fr 1fr 1.2fr 0.8fr;
+    gap: 16px;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+    font-size: 0.85rem;
+  }
+
+  .tabla-row:last-child {
+    border-bottom: none;
+  }
+
+  .tabla-row:hover {
+    background: var(--bg-secondary);
+  }
+
+  .prof-name {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .col-numero {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+  }
+
+  .tabla-footer {
+    background: var(--bg-secondary);
+    padding: 12px 16px;
+    display: grid;
+    grid-template-columns: 2fr 0.8fr 1fr 1fr 1fr 1fr 1.2fr 0.8fr;
+    gap: 16px;
+    font-weight: 700;
+    border-top: 2px solid var(--border);
+    align-items: center;
+  }
+
+  .tabla-footer > div:nth-child(n+2) {
+    text-align: right;
+  }
+
+  .footer-label {
+    color: var(--accent);
+  }
+
+  .empty-state {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-muted);
+  }
+
+  .empty-state svg {
+    margin-bottom: 12px;
+    opacity: 0.5;
+  }
+
+  .fecha-shortcuts {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+
+  .fecha-shortcut {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    border: 1px solid var(--border);
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .fecha-shortcut:hover {
+    background: var(--bg-secondary);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .fecha-shortcut.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+
+  .flatpickr-calendar {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+  <!-- Filtros -->
+  <div class="filtro-card">
+    <div>
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Período</label>
+        <div class="fecha-shortcuts">
+          <button type="button" class="fecha-shortcut active" onclick="setPeriodo('hoy')">Hoy</button>
+          <button type="button" class="fecha-shortcut" onclick="setPeriodo('semana')">Esta Semana</button>
+          <button type="button" class="fecha-shortcut" onclick="setPeriodo('mes')">Este Mes</button>
+          <button type="button" class="fecha-shortcut" onclick="setPeriodo('ano')">Este Año</button>
+          <button type="button" class="fecha-shortcut" onclick="setPeriodo('custom')">Personalizado</button>
+        </div>
+      </div>
+    </div>
+
+    <form method="get" class="filtro-group">
+      <div class="filtro-item" style="flex: 0 0 160px;">
+        <label for="fecha_rango">Rango de fechas</label>
+        <input type="text" id="fecha_rango" name="fecha_rango" placeholder="Selecciona rango..." readonly style="cursor: pointer;" />
+        <input type="hidden" id="fecha_inicio" name="fecha_inicio" value="{{ fecha_inicio|date:'Y-m-d' }}" />
+        <input type="hidden" id="fecha_fin" name="fecha_fin" value="{{ fecha_fin|date:'Y-m-d' }}" />
+      </div>
+
+      <div class="filtro-item" style="flex: 1; min-width: 180px;">
+        <label for="profesional">Profesional</label>
+        <select id="profesional" name="profesional">
+          <option value="">Todos</option>
+          {% for prof in profesionales_filter %}
+            <option value="{{ prof.id }}" {% if prof.id|stringformat:"s" == profesional_selected %}selected{% endif %}>
+              {{ prof.nombres }} {{ prof.apellidos }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="filtro-item" style="flex: 1; min-width: 180px;">
+        <label for="unidad_negocio">Unidad de Negocio</label>
+        <select id="unidad_negocio" name="unidad_negocio">
+          <option value="">Todas</option>
+          {% for unidad in unidades_negocio_filter %}
+            <option value="{{ unidad.id }}" {% if unidad.id|stringformat:"s" == unidad_selected %}selected{% endif %}>
+              {{ unidad.nombre }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="flex: 0 0 auto;">
+        Filtrar
+      </button>
+      <a href="{% url 'comisiones_todas' %}" class="btn btn-ghost" style="flex: 0 0 auto;">
+        Limpiar
+      </a>
+    </form>
+  </div>
+
+  <!-- Resumen de totales -->
+  <div class="resumen-cards">
+    <div class="resumen-card">
+      <div class="resumen-label">Citas</div>
+      <div class="resumen-valor">{{ total_citas }}</div>
+    </div>
+    <div class="resumen-card">
+      <div class="resumen-label">Ingresos Brutos</div>
+      <div class="resumen-valor">
+        $<span id="total-ingresos">{{ total_ingresos_general }}</span>
+      </div>
+    </div>
+    <div class="resumen-card">
+      <div class="resumen-label">Insumos</div>
+      <div class="resumen-valor">
+        $<span id="total-insumos">{{ total_insumos_general }}</span>
+      </div>
+    </div>
+    <div class="resumen-card">
+      <div class="resumen-label">Descuentos</div>
+      <div class="resumen-valor">
+        $<span id="total-descuentos">{{ total_descuentos_general }}</span>
+      </div>
+    </div>
+    <div class="resumen-card">
+      <div class="resumen-label">Neto</div>
+      <div class="resumen-valor">
+        $<span id="total-neto">{{ total_neto_general }}</span>
+      </div>
+    </div>
+    <div class="resumen-card" style="border: 2px solid var(--accent); background: rgba(46, 139, 139, 0.05);">
+      <div class="resumen-label">Comisión Total</div>
+      <div class="resumen-valor" style="color: var(--accent);">
+        $<span id="total-comision">{{ total_comision_general }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabla de comisiones -->
+  {% if datos_comisiones %}
+    <div class="tabla-comisiones">
+      <div class="tabla-header">
+        <div>Profesional</div>
+        <div>Citas</div>
+        <div>Ingresos</div>
+        <div>Insumos</div>
+        <div>Descuentos</div>
+        <div>Neto</div>
+        <div>Comisión</div>
+        <div>% Comisión</div>
+      </div>
+
+      {% for comision in datos_comisiones %}
+      <div class="tabla-row">
+        <div class="prof-name">{{ comision.profesional.nombres }} {{ comision.profesional.apellidos }}</div>
+        <div class="col-numero">{{ comision.cantidad_citas }}</div>
+        <div class="col-numero">$<span class="monto-fmt">{{ comision.monto_ingresos }}</span></div>
+        <div class="col-numero">$<span class="monto-fmt">{{ comision.monto_insumos }}</span></div>
+        <div class="col-numero">$<span class="monto-fmt">{{ comision.monto_descuentos }}</span></div>
+        <div class="col-numero">$<span class="monto-fmt">{{ comision.monto_neto }}</span></div>
+        <div class="col-numero" style="color: var(--accent); font-weight: 600;">
+          $<span class="monto-fmt">{{ comision.monto_comision }}</span>
+        </div>
+        <div class="col-numero">
+          {% if comision.monto_ingresos > 0 %}
+            {{ comision.porcentaje_comision|floatformat:0 }}%
+          {% else %}
+            —
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+
+      <div class="tabla-footer">
+        <div class="footer-label">TOTAL</div>
+        <div class="col-numero">{{ total_citas }}</div>
+        <div class="col-numero">$<span id="footer-ingresos" class="monto-fmt">{{ total_ingresos_general }}</span></div>
+        <div class="col-numero">$<span id="footer-insumos" class="monto-fmt">{{ total_insumos_general }}</span></div>
+        <div class="col-numero">$<span id="footer-descuentos" class="monto-fmt">{{ total_descuentos_general }}</span></div>
+        <div class="col-numero">$<span id="footer-neto" class="monto-fmt">{{ total_neto_general }}</span></div>
+        <div class="col-numero" style="color: var(--accent);">
+          $<span id="footer-comision" class="monto-fmt">{{ total_comision_general }}</span>
+        </div>
+        <div class="col-numero">
+          {% if total_ingresos_general > 0 %}
+            {% widthratio total_comision_general total_ingresos_general 100 %}%
+          {% else %}
+            —
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <div class="tabla-comisiones">
+      <div class="empty-state">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+          <polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+        <p>No hay comisiones registradas para este período</p>
+        <p style="margin-top: 4px; font-size: 0.78rem; color: var(--text-muted);">
+          Selecciona un período diferente o crea nuevas citas en la agenda
+        </p>
+      </div>
+    </div>
+  {% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+<script>
+  // Configurar date range picker
+  window.addEventListener('load', function() {
+    const fechaInicio = document.getElementById('fecha_inicio');
+    const fechaFin = document.getElementById('fecha_fin');
+    const fechaRango = document.getElementById('fecha_rango');
+
+    const picker = flatpickr(fechaRango, {
+      mode: 'range',
+      dateFormat: 'd/m/Y',
+      locale: 'es',
+      defaultDate: [
+        "{{ fecha_inicio|date:'Y-m-d' }}",
+        "{{ fecha_fin|date:'Y-m-d' }}"
+      ],
+      onChange: function(selectedDates) {
+        if (selectedDates.length === 2) {
+          const inicio = selectedDates[0];
+          const fin = selectedDates[1];
+
+          fechaInicio.value = inicio.toISOString().split('T')[0];
+          fechaFin.value = fin.toISOString().split('T')[0];
+
+          // Actualizar estado de botones
+          actualizarBotonesShortcut();
+        }
+      }
+    });
+
+    // Funciones de acceso rápido
+    window.setPeriodo = function(periodo) {
+      const hoy = new Date();
+      const inicio = new Date(hoy);
+      const fin = new Date(hoy);
+
+      switch(periodo) {
+        case 'hoy':
+          break; // Ya están en hoy
+        case 'semana':
+          const primeroSemana = new Date(hoy);
+          primeroSemana.setDate(hoy.getDate() - hoy.getDay());
+          inicio.setDate(primeroSemana.getDate());
+          fin.setDate(hoy.getDate() + (6 - hoy.getDay()));
+          break;
+        case 'mes':
+          inicio.setDate(1);
+          fin.setMonth(fin.getMonth() + 1);
+          fin.setDate(0);
+          break;
+        case 'ano':
+          inicio.setMonth(0);
+          inicio.setDate(1);
+          fin.setMonth(11);
+          fin.setDate(31);
+          break;
+        case 'custom':
+          return; // El usuario selecciona el rango manualmente
+      }
+
+      if (periodo !== 'custom') {
+        picker.setDate([inicio, fin], false);
+        fechaInicio.value = inicio.toISOString().split('T')[0];
+        fechaFin.value = fin.toISOString().split('T')[0];
+        actualizarBotonesShortcut();
+      }
+    };
+
+    function actualizarBotonesShortcut() {
+      const inicio = new Date(fechaInicio.value);
+      const fin = new Date(fechaFin.value);
+      const hoy = new Date();
+
+      let periodoActual = null;
+
+      // Detectar período actual
+      if (inicio.toDateString() === hoy.toDateString() && fin.toDateString() === hoy.toDateString()) {
+        periodoActual = 'hoy';
+      } else {
+        const primeroMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+        const ultimoMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+
+        if (inicio.toDateString() === primeroMes.toDateString() && fin.toDateString() === ultimoMes.toDateString()) {
+          periodoActual = 'mes';
+        }
+      }
+
+      document.querySelectorAll('.fecha-shortcut').forEach(btn => {
+        btn.classList.remove('active');
+      });
+
+      if (periodoActual) {
+        document.querySelector(`[onclick="setPeriodo('${periodoActual}')"]`).classList.add('active');
+      }
+    }
+
+    // Inicializar estado de botones
+    actualizarBotonesShortcut();
+
+    // Formatear montos con puntos de miles
+    document.querySelectorAll('.monto-fmt').forEach(elem => {
+      const valor = parseInt(elem.textContent);
+      elem.textContent = valor.toLocaleString('es-CL');
+    });
+  });
+</script>
+{% endblock %}

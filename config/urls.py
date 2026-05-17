@@ -29,11 +29,30 @@ urlpatterns = [
     path('profesionales/', views.profesionales_view, name='profesionales'),
     path('profesionales/<int:profesional_id>/editar/', views.editar_profesional, name='editar_profesional'),
     path('profesionales/<int:profesional_id>/toggle/', views.toggle_profesional, name='toggle_profesional'),
+    path('profesionales/<int:profesional_id>/estructura/crear/', views.crear_estructura_comision, name='crear_estructura_comision'),
+    path('profesionales/estructura/<int:estructura_id>/editar/', views.editar_estructura_comision, name='editar_estructura_comision'),
+    path('profesionales/estructura/<int:estructura_id>/eliminar/', views.eliminar_estructura_comision, name='eliminar_estructura_comision'),
+
+    # Categorías de Servicio
+    path('categorias/', views.categorias_view, name='categorias'),
+    path('categorias/crear/', views.crear_categoria, name='crear_categoria'),
+    path('categorias/<int:categoria_id>/editar/', views.editar_categoria, name='editar_categoria'),
+    path('categorias/<int:categoria_id>/toggle/', views.toggle_categoria, name='toggle_categoria'),
+    path('categorias/<int:categoria_id>/eliminar/', views.eliminar_categoria, name='eliminar_categoria'),
+
+    # Insumos
+    path('insumos/', views.insumos_view, name='insumos'),
+    path('insumos/crear/', views.crear_insumo, name='crear_insumo'),
+    path('insumos/<int:insumo_id>/editar/', views.editar_insumo, name='editar_insumo'),
+    path('insumos/<int:insumo_id>/toggle/', views.toggle_insumo, name='toggle_insumo'),
+    path('insumos/<int:insumo_id>/eliminar/', views.eliminar_insumo, name='eliminar_insumo'),
 
     # Servicios
     path('servicios/', views.servicios_view, name='servicios'),
     path('servicios/crear/', views.crear_servicio, name='crear_servicio'),
+    path('servicios/<int:servicio_id>/editar/', views.editar_servicio, name='editar_servicio'),
     path('servicios/<int:servicio_id>/toggle/', views.toggle_servicio, name='toggle_servicio'),
+    path('servicios/<int:servicio_id>/eliminar/', views.eliminar_servicio, name='eliminar_servicio'),
 
     # Usuarios
     path('usuarios/', views.usuarios_view, name='usuarios'),
@@ -48,4 +67,12 @@ urlpatterns = [
     # Descuentos
     path('descuentos/pendientes/', views.descuentos_pendientes_view, name='descuentos_pendientes'),
     path('descuentos/<int:descuento_id>/autorizar/', views.autorizar_descuento, name='autorizar_descuento'),
+
+    # Autorizaciones (Dashboard)
+    path('autorizaciones/', views.autorizaciones_view, name='autorizaciones'),
+
+    # Comisiones y Ventas
+    path('comisiones/', views.comisiones_profesional_view, name='comisiones'),
+    path('comisiones/proyeccion/', views.comisiones_proyeccion_view, name='comisiones_proyeccion'),
+    path('comisiones/todas/', views.comisiones_todas_view, name='comisiones_todas'),
 ]
