@@ -3,3 +3,9 @@ __pycache__/
 *.pyc
 db.sqlite3
 .env
+
+# Archivos de backup generados durante desarrollo
+*.backup
+*.broken_backup
+*.bak
+*.tmp

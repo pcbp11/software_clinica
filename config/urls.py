@@ -33,7 +33,7 @@ urlpatterns = [
     path('profesionales/estructura/<int:estructura_id>/editar/', views.editar_estructura_comision, name='editar_estructura_comision'),
     path('profesionales/estructura/<int:estructura_id>/eliminar/', views.eliminar_estructura_comision, name='eliminar_estructura_comision'),
 
-    # Categorías de Servicio
+    # Categorias de Servicio
     path('categorias/', views.categorias_view, name='categorias'),
     path('categorias/crear/', views.crear_categoria, name='crear_categoria'),
     path('categorias/<int:categoria_id>/editar/', views.editar_categoria, name='editar_categoria'),
@@ -43,9 +43,24 @@ urlpatterns = [
     # Insumos
     path('insumos/', views.insumos_view, name='insumos'),
     path('insumos/crear/', views.crear_insumo, name='crear_insumo'),
+    path('insumos/sku-preview/', views.sku_preview, name='sku_preview'),
     path('insumos/<int:insumo_id>/editar/', views.editar_insumo, name='editar_insumo'),
     path('insumos/<int:insumo_id>/toggle/', views.toggle_insumo, name='toggle_insumo'),
     path('insumos/<int:insumo_id>/eliminar/', views.eliminar_insumo, name='eliminar_insumo'),
+
+    # Proveedores
+    path('proveedores/', views.proveedores_view, name='proveedores'),
+    path('proveedores/crear/', views.crear_proveedor, name='crear_proveedor'),
+    path('proveedores/<int:proveedor_id>/editar/', views.editar_proveedor, name='editar_proveedor'),
+    path('proveedores/<int:proveedor_id>/toggle/', views.toggle_proveedor, name='toggle_proveedor'),
+    path('proveedores/<int:proveedor_id>/eliminar/', views.eliminar_proveedor, name='eliminar_proveedor'),
+
+    # Productos de Proveedor (catalogo)
+    path('productos-proveedor/', views.productos_proveedor_view, name='productos_proveedor'),
+    path('productos-proveedor/crear/', views.crear_producto_proveedor, name='crear_producto_proveedor'),
+    path('productos-proveedor/<int:producto_id>/editar/', views.editar_producto_proveedor, name='editar_producto_proveedor'),
+    path('productos-proveedor/<int:producto_id>/toggle/', views.toggle_producto_proveedor, name='toggle_producto_proveedor'),
+    path('productos-proveedor/<int:producto_id>/eliminar/', views.eliminar_producto_proveedor, name='eliminar_producto_proveedor'),
 
     # Servicios
     path('servicios/', views.servicios_view, name='servicios'),

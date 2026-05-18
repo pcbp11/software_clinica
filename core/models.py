@@ -483,7 +483,65 @@ class Descuento(models.Model):
         return f"${self.monto_descuento:,.0f}".replace(',', '.')
 
 
-# ── COMMISSION SYSTEM ────────────────────────────────────────────────────────
+# ── INVENTORY & SUPPLIES SYSTEM ─────────────────────────────────────────────
+
+class Proveedor(models.Model):
+    """Proveedores de insumos"""
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='proveedores')
+    nombre = models.CharField(max_length=200)
+    razon_social = models.CharField(max_length=200, blank=True)
+    rut = models.CharField(max_length=12, blank=True)
+    telefono = models.CharField(max_length=20, blank=True)
+    email = models.EmailField(blank=True)
+    contacto = models.CharField(max_length=100, blank=True)
+    activo = models.BooleanField(default=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Proveedor"
+        verbose_name_plural = "Proveedores"
+        ordering = ['nombre']
+
+    def __str__(self):
+        return self.nombre
+
+
+class ProductoProveedor(models.Model):
+    """Productos que ofrece cada proveedor"""
+    proveedor = models.ForeignKey(Proveedor, on_delete=models.CASCADE, related_name='productos')
+    nombre = models.CharField(max_length=200, help_text="Nombre del producto que ofrece este proveedor")
+    descripcion = models.TextField(blank=True)
+
+    unidad = models.CharField(
+        max_length=20,
+        choices=[
+            ('unidad', 'Unidad'),
+            ('ml', 'ml'),
+            ('gr', 'gr'),
+            ('caja', 'Caja'),
+            ('botella', 'Botella'),
+            ('jeringa', 'Jeringa'),
+            ('ampolla', 'Ampolla'),
+        ],
+        default='unidad',
+        help_text="Unidad de medida por defecto para este producto"
+    )
+
+    activo = models.BooleanField(default=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Producto Proveedor"
+        verbose_name_plural = "Productos Proveedor"
+        ordering = ['proveedor__nombre', 'nombre']
+        unique_together = ('proveedor', 'nombre')
+        indexes = [
+            models.Index(fields=['proveedor', 'activo']),
+        ]
+
+    def __str__(self):
+        return f"{self.nombre} ({self.proveedor.nombre})"
+
 
 class Insumo(models.Model):
     """Productos/insumos utilizados en servicios con costo de inventario"""
@@ -495,38 +553,181 @@ class Insumo(models.Model):
         ('caja', 'Caja'),
     ]
 
+    ESTADOS = [
+        ('vigente', 'Vigente'),
+        ('terminado', 'Terminado'),
+    ]
+
+    ESTADOS_TRANSFERENCIA = [
+        ('pendiente', 'Pendiente'),
+        ('realizada', 'Realizada'),
+    ]
+
+    UNIDADES_TIEMPO = [
+        ('dias', 'Días'),
+        ('meses', 'Meses'),
+    ]
+
+    # Relaciones
     unidad_negocio = models.ForeignKey(UnidadNegocio, on_delete=models.CASCADE, related_name='insumos')
-    nombre = models.CharField(max_length=200)
-    codigo_sku = models.CharField(max_length=50, blank=True, unique=True)
-    descripcion = models.TextField(blank=True)
+    producto_proveedor = models.ForeignKey(ProductoProveedor, on_delete=models.CASCADE, related_name='insumos', help_text="Selecciona el producto del proveedor")
+    paciente = models.ForeignKey(Paciente, on_delete=models.SET_NULL, null=True, blank=True, related_name='insumos_vendidos')
 
-    costo_unitario = models.PositiveIntegerField(help_text="Costo en pesos chilenos")
-    precio_venta = models.PositiveIntegerField(
-        help_text="Precio de venta en pesos chilenos",
-        null=True,
-        blank=True
-    )
+    # Información básica
+    codigo_sku = models.CharField(max_length=50, blank=True, unique=True, help_text="Se genera automáticamente en formato BOTENE_001")
+    descripcion = models.TextField(blank=True, help_text="Notas específicas de este lote de insumo")
 
+    # Fechas
+    fecha_compra = models.DateField(help_text="Fecha de compra del insumo")
+    fecha_vencimiento = models.DateField(null=True, blank=True, help_text="Fecha de vencimiento del producto")
+    fecha_venta = models.DateField(null=True, blank=True, help_text="Fecha en que se vendió el insumo (automática)")
+    fecha_transferencia = models.DateField(null=True, blank=True, help_text="Fecha de transferencia bancaria")
+
+    # Tiempo máximo proyectado (indicador de stock crítico)
+    tiempo_maximo_proyectado = models.PositiveIntegerField(null=True, blank=True, help_text="Tiempo máximo antes de considerarlo crítico")
+    unidad_tiempo = models.CharField(max_length=10, choices=UNIDADES_TIEMPO, default='meses')
+
+    # Costos (neto e IVA)
+    costo_neto = models.PositiveIntegerField(help_text="Costo neto en pesos chilenos")
+    costo_con_iva = models.PositiveIntegerField(help_text="Costo con IVA incluido en pesos chilenos")
+
+    # Precio venta profesionales (neto e IVA)
+    precio_venta_neto = models.PositiveIntegerField(null=True, blank=True, help_text="Precio venta neto a profesionales")
+    precio_venta_con_iva = models.PositiveIntegerField(null=True, blank=True, help_text="Precio venta con IVA a profesionales")
+
+    # Unidad de medida
     unidad = models.CharField(max_length=20, choices=UNIDADES, default='unidad')
     cantidad_disponible = models.PositiveIntegerField(default=0)
 
+    # Estados
+    estado = models.CharField(max_length=20, choices=ESTADOS, default='vigente')
+    estado_transferencia = models.CharField(max_length=20, choices=ESTADOS_TRANSFERENCIA, default='pendiente')
+
+    # Notas
+    notas = models.TextField(blank=True, help_text="Notas adicionales sobre el insumo")
+
+    # Auditoría
     activo = models.BooleanField(default=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = "Insumo"
         verbose_name_plural = "Insumos"
-        ordering = ['nombre']
+        ordering = ['-fecha_creacion', 'producto_proveedor__nombre']
+        indexes = [
+            models.Index(fields=['unidad_negocio', '-fecha_creacion']),
+            models.Index(fields=['estado', 'fecha_vencimiento']),
+            models.Index(fields=['producto_proveedor', 'estado']),
+        ]
 
     def __str__(self):
-        return f"{self.nombre} ({self.codigo_sku})" if self.codigo_sku else self.nombre
+        nombre = self.producto_proveedor.nombre if self.producto_proveedor else "Sin producto"
+        return f"{nombre} ({self.codigo_sku})" if self.codigo_sku else nombre
 
     @property
-    def margen(self):
-        """Margen de ganancia: (precio_venta - costo) / precio_venta * 100"""
-        if not self.precio_venta or self.precio_venta == 0:
+    def nombre(self):
+        """Propiedad para acceder al nombre desde producto_proveedor"""
+        return self.producto_proveedor.nombre if self.producto_proveedor else "Sin nombre"
+
+    @property
+    def proveedor(self):
+        """Propiedad para acceder al proveedor desde producto_proveedor"""
+        return self.producto_proveedor.proveedor if self.producto_proveedor else None
+
+    @property
+    def mes_compra(self):
+        """Extrae el mes de la fecha de compra para estadísticas"""
+        return self.fecha_compra.month if self.fecha_compra else None
+
+    @property
+    def mes_venta(self):
+        """Extrae el mes de la fecha de venta para estadísticas"""
+        return self.fecha_venta.month if self.fecha_venta else None
+
+    @property
+    def margen_neto(self):
+        """Margen de ganancia basado en precio neto"""
+        if not self.precio_venta_neto or self.precio_venta_neto == 0:
             return 0
-        return ((self.precio_venta - self.costo_unitario) / self.precio_venta) * 100
+        return ((self.precio_venta_neto - self.costo_neto) / self.precio_venta_neto) * 100
+
+    def cambiar_estado_terminado(self, paciente=None, fecha_venta=None):
+        """Cambia el estado a terminado cuando se vende en agenda"""
+        self.estado = 'terminado'
+        if paciente:
+            self.paciente = paciente
+        if fecha_venta:
+            self.fecha_venta = fecha_venta
+        else:
+            self.fecha_venta = date.today()
+        self.save()
+
+    def es_por_vencer(self, dias=30):
+        """Verifica si el insumo está por vencer en los próximos N días"""
+        if not self.fecha_vencimiento:
+            return False
+        hoy = date.today()
+        dias_para_vencer = (self.fecha_vencimiento - hoy).days
+        return 0 <= dias_para_vencer <= dias
+
+    @staticmethod
+    def generar_sku(producto_proveedor, fecha_compra):
+        """
+        Genera SKU automático en formato: BOTENE_001
+        BOT = primeras 3 letras del producto
+        ENE = mes en español (abreviado)
+        _001 = correlativo del mes
+        """
+        if not producto_proveedor or not fecha_compra:
+            return None
+
+        nombre_producto = producto_proveedor.nombre
+
+        # Meses en español abreviados
+        meses_es = {
+            1: 'ENE', 2: 'FEB', 3: 'MAR', 4: 'ABR', 5: 'MAY', 6: 'JUN',
+            7: 'JUL', 8: 'AGO', 9: 'SEP', 10: 'OCT', 11: 'NOV', 12: 'DIC'
+        }
+
+        # Primeras 3 letras del producto en mayúsculas
+        prefijo = nombre_producto[:3].upper()
+
+        # Mes abreviado
+        mes_num = fecha_compra.month
+        mes_abr = meses_es.get(mes_num, 'XXX')
+
+        # Mes y año para buscar correlativo
+        mes_year_str = fecha_compra.strftime('%m_%Y')  # ej: 01_2026
+
+        # Contar insumos con el mismo prefijo y mes
+        sku_prefix = f"{prefijo}{mes_abr}_"
+
+        # Buscar todos los SKU que empiezan con este prefijo y obtenemos el número más alto
+        insumos_mes = Insumo.objects.filter(
+            codigo_sku__startswith=sku_prefix
+        )
+
+        if not insumos_mes.exists():
+            correlativo = 1
+        else:
+            # Extraer el número del último SKU
+            ultimos_nums = []
+            for insumo in insumos_mes:
+                try:
+                    num = int(insumo.codigo_sku.split('_')[-1])
+                    ultimos_nums.append(num)
+                except (ValueError, IndexError):
+                    pass
+
+            correlativo = max(ultimos_nums) + 1 if ultimos_nums else 1
+
+        return f"{prefijo}{mes_abr}_{correlativo:03d}"
+
+    def generar_codigo_sku_automatico(self):
+        """Genera el código SKU si no existe"""
+        if not self.codigo_sku and self.producto_proveedor and self.fecha_compra:
+            self.codigo_sku = self.generar_sku(self.producto_proveedor, self.fecha_compra)
 
 
 class ServicioInsumo(models.Model):

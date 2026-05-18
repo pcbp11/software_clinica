@@ -14,6 +14,8 @@ from .models import (
     Pago,
     SeguimientoPaciente,
     Descuento,
+    Proveedor,
+    ProductoProveedor,
     Insumo,
     ServicioInsumo,
     EstructuraComision,
@@ -415,7 +417,32 @@ class DescuentoAdmin(admin.ModelAdmin):
     readonly_fields = ('fecha_solicitud', 'fecha_autorizacion', 'solicitado_por')
 
 
-# ── COMMISSION SYSTEM ADMIN ────────────────────────────────────────────────────
+# ── INVENTORY & SUPPLIES SYSTEM ADMIN ─────────────────────────────────────────
+
+class ProductoProveedorInline(admin.TabularInline):
+    model = ProductoProveedor
+    extra = 1
+    fields = ('nombre', 'descripcion', 'unidad', 'activo')
+
+
+@admin.register(Proveedor)
+class ProveedorAdmin(admin.ModelAdmin):
+    list_display = ('nombre', 'rut', 'telefono', 'email', 'activo', 'fecha_creacion')
+    list_filter = ('empresa', 'activo', 'fecha_creacion')
+    search_fields = ('nombre', 'razon_social', 'rut', 'email')
+    inlines = [ProductoProveedorInline]
+    fieldsets = (
+        ('Información básica', {
+            'fields': ('empresa', 'nombre', 'razon_social', 'rut')
+        }),
+        ('Contacto', {
+            'fields': ('telefono', 'email', 'contacto')
+        }),
+        ('Estado', {
+            'fields': ('activo',)
+        }),
+    )
+
 
 @admin.register(Insumo)
 class InsumoAdmin(admin.ModelAdmin):
@@ -423,37 +450,97 @@ class InsumoAdmin(admin.ModelAdmin):
         'nombre',
         'codigo_sku',
         'unidad_negocio',
-        'costo_unitario',
-        'precio_venta',
-        'margen',
-        'cantidad_disponible',
+        'estado',
+        'costo_neto',
+        'precio_venta_neto',
+        'margen_neto',
+        'fecha_vencimiento',
         'activo',
     )
-    list_filter = ('unidad_negocio', 'activo', 'unidad')
-    search_fields = ('nombre', 'codigo_sku', 'descripcion')
+    list_filter = ('unidad_negocio', 'estado', 'estado_transferencia', 'producto_proveedor__proveedor', 'activo', 'fecha_vencimiento')
+    search_fields = ('codigo_sku', 'descripcion', 'producto_proveedor__nombre', 'producto_proveedor__proveedor__nombre')
+    readonly_fields = ('codigo_sku_generado', 'fecha_venta', 'actualizado_en', 'margen_neto')
+
+    def codigo_sku_generado(self, obj):
+        """Mostrar el SKU generado automáticamente"""
+        if obj.codigo_sku:
+            return f"✓ {obj.codigo_sku} (Generado automáticamente)"
+        return "Se generará al guardar"
+    codigo_sku_generado.short_description = "Código SKU"
+
     fieldsets = (
         ('Información básica', {
             'fields': (
                 'unidad_negocio',
-                'nombre',
-                'codigo_sku',
-                'descripcion',
+                'producto_proveedor',
+            ),
+            'description': '✓ Selecciona el ProductoProveedor (el nombre y proveedor se obtienen automáticamente)'
+        }),
+        ('Código SKU (Automático)', {
+            'fields': (
+                'codigo_sku_generado',
+            ),
+            'description': '⏳ El SKU se generará automáticamente cuando guardes el insumo (Formato: BOTENE_001)'
+        }),
+        ('Fechas', {
+            'fields': (
+                'fecha_compra',
+                'fecha_vencimiento',
+                'fecha_venta',
+            ),
+            'description': 'Selecciona la fecha de compra para generar el SKU del mes correspondiente'
+        }),
+        ('Costos (Neto + IVA)', {
+            'fields': (
+                'costo_neto',
+                'costo_con_iva',
+                'precio_venta_neto',
+                'precio_venta_con_iva',
+                'margen_neto',
             )
         }),
-        ('Precios e inventario', {
+        ('Inventario', {
             'fields': (
-                'costo_unitario',
-                'precio_venta',
                 'unidad',
                 'cantidad_disponible',
+                'tiempo_maximo_proyectado',
+                'unidad_tiempo',
             )
         }),
-        ('Estado', {
+        ('Control de Estado', {
+            'fields': (
+                'estado',
+                'estado_transferencia',
+                'fecha_transferencia',
+            )
+        }),
+        ('Información adicional', {
+            'fields': (
+                'paciente',
+                'notas',
+            )
+        }),
+        ('Auditoría', {
             'fields': (
                 'activo',
-            )
+                'actualizado_en',
+            ),
+            'classes': ('collapse',)
         }),
     )
+
+    def get_form(self, request, obj=None, **kwargs):
+        """Personalizar formulario para filtrar productos por proveedor"""
+        form = super().get_form(request, obj, **kwargs)
+
+        # Si hay un proveedor seleccionado, filtrar los productos
+        if obj and obj.proveedor:
+            form.base_fields['producto_proveedor'].queryset = ProductoProveedor.objects.filter(
+                proveedor=obj.proveedor,
+                activo=True
+            )
+
+        return form
 
 
 class ServicioInsumoInline(admin.TabularInline):

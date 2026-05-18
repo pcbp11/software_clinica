@@ -36,9 +36,10 @@
   /* ── Barra superior ── */
   .agenda-bar {
     display: flex; align-items: center; gap: 16px;
-    padding: 14px 24px; background: #ffffff;
-    border-bottom: 1px solid #f0f0f0; flex-shrink: 0; flex-wrap: wrap;
-    min-height: 60px;
+    padding: 16px 28px; background: #ffffff;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0; flex-wrap: wrap;
+    min-height: 64px;
   }
   .btn-toggle-sidebar {
     width: 32px; height: 32px; border-radius: 7px; border: 1px solid var(--border);
@@ -271,13 +272,14 @@
      visualmente el primer label de hora. */
   .cal-head-row th {
     background: #ffffff !important;
-    border-bottom: 1px solid #e8eaed;
-    padding: 12px 12px 10px !important;
+    border-bottom: 1px solid var(--border);
+    padding: 14px 12px 12px !important;
     text-align: center !important;
-    min-width: 140px;
+    min-width: 150px;
     position: sticky !important;
     top: 0 !important;
     z-index: 20 !important;
+    transition: background 0.15s;
   }
   /* Esquina superior izquierda — sticky en ambos ejes */
   .cal-corner {
@@ -303,19 +305,22 @@
 
   .pro-header-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; }
   .pro-avatar {
-    width: 40px; height: 40px; border-radius: 50%;
+    width: 44px; height: 44px; border-radius: 50%;
     background: var(--pro-bg, var(--accent));
     color: #fff; display: inline-flex; align-items: center; justify-content: center;
-    font-size: 0.85rem; font-weight: 700; letter-spacing: 0.02em;
+    font-size: 0.92rem; font-weight: 600; letter-spacing: 0.02em;
     overflow: hidden; flex-shrink: 0;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
-    border: 2px solid #fff;
+    box-shadow: 0 4px 12px rgba(30,40,69,0.10), 0 1px 3px rgba(30,40,69,0.06);
+    border: 3px solid #fff;
+    transition: transform 0.2s ease;
   }
+  .cal-head-row th:hover .pro-avatar { transform: scale(1.05); }
   .pro-avatar img {
     width: 100%; height: 100%; object-fit: cover; border-radius: 50%;
   }
-  .pro-name { font-size: 0.76rem; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
-  .pro-subtitle { font-size: 0.65rem; color: #999; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+  .pro-name { font-size: 0.8rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; letter-spacing: -0.005em; }
+  .pro-subtitle { font-size: 0.68rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; margin-top: 2px; }
+  .pro-header-wrap { gap: 6px !important; padding: 2px 0; }
 
   /* Gutter horas — sticky nativo al hacer scroll horizontal.
      padding-top: empuja el contenido hacia abajo para que el primer label
@@ -385,28 +390,28 @@
     animation: pulse-now 2s ease-in-out infinite;
   }
 
-  /* Slot disponible */
+  /* Slot disponible — semi-visible permanente, más nítido al hover */
   .cal-slot-btn {
     position: absolute; left: 2px; right: 2px; height: 26px;
     display: flex; align-items: center; justify-content: center; gap: 4px;
     background: transparent; border: none; border-radius: 5px; cursor: pointer;
     font-size: 0.67rem; color: var(--accent); font-family: var(--font-body); font-weight: 500;
-    opacity: 0; transition: opacity 0.2s, background 0.2s; z-index: 2;
+    opacity: 0.35; transition: opacity 0.2s, background 0.2s; z-index: 2;
     letter-spacing: 0.01em;
   }
-  .cal-col-inner:hover .cal-slot-btn { opacity: 0.75; }
+  .cal-col-inner:hover .cal-slot-btn { opacity: 0.85; }
   .cal-slot-btn:hover { opacity: 1 !important; background: var(--accent-light); }
 
-  /* Tarjeta de cita */
+  /* Tarjeta de cita — moderno con sombras suaves */
   .cal-event {
-    position: absolute; left: 4px; right: 4px; border-radius: 8px;
-    padding: 6px 10px; cursor: pointer; z-index: 3; overflow: hidden;
-    border-left: 5px solid transparent;
-    transition: box-shadow 0.2s, transform 0.18s, filter 0.18s;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    position: absolute; left: 4px; right: 4px; border-radius: 10px;
+    padding: 7px 11px; cursor: pointer; z-index: 3; overflow: hidden;
+    border-left: 4px solid transparent;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(30,40,69,0.08), 0 1px 2px rgba(30,40,69,0.04);
   }
   .cal-event:hover {
-    box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+    box-shadow: 0 8px 24px rgba(30,40,69,0.16), 0 2px 6px rgba(30,40,69,0.08);
     transform: translateY(-2px);
     z-index: 10;
   }
@@ -1739,4 +1744,163 @@
     const params = new URLSearchParams();
 
     // Mantener parámetros existentes
-    const fechaActua
+    const fechaActual = '{{ fecha|date:"Y-m-d" }}';
+    const servicioActual = new URLSearchParams(window.location.search).get('servicio') || '';
+
+    params.set('fecha', fechaActual);
+    if (servicioActual) params.set('servicio', servicioActual);
+
+    const sucursal = document.getElementById('filtro-sucursal')?.value || '';
+    const profesional = document.getElementById('filtro-profesional')?.value || '';
+    const estado = document.getElementById('filtro-estado')?.value || '';
+
+    if (sucursal) params.set('sucursal', sucursal);
+    if (profesional) params.set('profesional', profesional);
+    if (estado) params.set('estados', estado);
+
+    window.location.search = params.toString();
+  }
+
+  function inicializarFiltros() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sucursal = urlParams.get('sucursal') || '';
+    const profesional = urlParams.get('profesional') || '';
+    const estados = urlParams.get('estados') || '';
+    if (sucursal) { const sel = document.getElementById('filtro-sucursal'); if (sel) sel.value = sucursal; }
+    if (profesional) { const sel = document.getElementById('filtro-profesional'); if (sel) sel.value = profesional; }
+    if (estados) { const sel = document.getElementById('filtro-estado'); if (sel) sel.value = estados; }
+  }
+
+  function toggleSidebar() {
+    const sidebar = document.getElementById('agenda-sidebar');
+    const isHidden = sidebar.classList.toggle('hidden');
+    localStorage.setItem('agenda_sidebar_hidden', isHidden ? 'true' : 'false');
+  }
+
+  function inicializarSidebarState() {
+    const sidebar = document.getElementById('agenda-sidebar');
+    const wasHidden = localStorage.getItem('agenda_sidebar_hidden') === 'true';
+    if (wasHidden) { sidebar.classList.add('hidden'); }
+  }
+
+  // ─── Funciones del Mini Calendario ─────────────────────────────────
+  let miniCalState = {
+    year: {{ fecha|date:"Y" }},
+    month: {{ fecha|date:"n" }} - 1,
+    selected: '{{ fecha|date:"Y-m-d" }}'
+  };
+
+  function renderMiniCalendar() {
+    const container = document.getElementById('mini-calendar');
+    if (!container) return;
+    const year = miniCalState.year;
+    const month = miniCalState.month;
+    const selected = miniCalState.selected;
+    // Fecha local (NO toISOString — eso devuelve UTC y marca día equivocado)
+    const _now = new Date();
+    const today = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
+
+    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+    let html = `
+      <div class="mini-cal-header">
+        <button class="mini-cal-nav" onclick="miniCalPrevMonth()">‹</button>
+        <div class="mini-cal-title">${monthNames[month]} ${year}</div>
+        <button class="mini-cal-nav" onclick="miniCalNextMonth()">›</button>
+      </div>
+      <div class="mini-cal-weekdays">
+    `;
+    dayNames.forEach(day => { html += `<div class="mini-cal-weekday">${day}</div>`; });
+    html += '</div><div class="mini-cal-days">';
+
+    for (let i = firstDay - 1; i >= 0; i--) {
+      const day = daysInPrevMonth - i;
+      html += `<div class="mini-cal-day other-month">${day}</div>`;
+    }
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const isToday = dateStr === today;
+      const isSelected = dateStr === selected;
+      const classes = ['mini-cal-day'];
+      if (isToday) classes.push('today');
+      if (isSelected) classes.push('selected');
+      html += `<div class="${classes.join(' ')}" onclick="miniCalSelectDate('${dateStr}')">${day}</div>`;
+    }
+    const remainingDays = 42 - (firstDay + daysInMonth);
+    for (let day = 1; day <= remainingDays; day++) {
+      html += `<div class="mini-cal-day other-month">${day}</div>`;
+    }
+    html += '</div>';
+    container.innerHTML = html;
+  }
+
+  function miniCalPrevMonth() {
+    miniCalState.month--;
+    if (miniCalState.month < 0) { miniCalState.month = 11; miniCalState.year--; }
+    renderMiniCalendar();
+  }
+
+  function miniCalNextMonth() {
+    miniCalState.month++;
+    if (miniCalState.month > 11) { miniCalState.month = 0; miniCalState.year++; }
+    renderMiniCalendar();
+  }
+
+  function miniCalSelectDate(dateStr) {
+    miniCalState.selected = dateStr;
+    renderMiniCalendar();
+    const servicio = '{{ servicio_id }}';
+    window.location.href = '?fecha=' + dateStr + '&servicio=' + servicio;
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    renderMiniCalendar();
+    const currentDate = '{{ fecha|date:"Y-m-d" }}';
+    const servicio = '{{ servicio_id }}';
+    const topbarInput = document.getElementById('nav-date-input');
+    if (topbarInput) {
+      flatpickr(topbarInput, {
+        defaultDate: currentDate,
+        locale: 'es',
+        dateFormat: 'd-m-Y',
+        onClose: function(selectedDates) {
+          if (selectedDates.length > 0) {
+            const d = selectedDates[0];
+            const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            window.location.href = '?fecha=' + ymd + '&servicio=' + servicio;
+          }
+        }
+      });
+      const fecha = new Date(currentDate);
+      topbarInput.value = fecha.toLocaleDateString('es-CL', { weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit' });
+    }
+
+    inicializarSidebarState();
+    const btnToggle = document.getElementById('btn-sidebar-toggle');
+    if (btnToggle) { btnToggle.addEventListener('click', toggleSidebar); }
+
+    inicializarFiltros();
+    const filtroSucursal = document.getElementById('filtro-sucursal');
+    const filtroProfesional = document.getElementById('filtro-profesional');
+    const filtroEstado = document.getElementById('filtro-estado');
+    if (filtroSucursal) filtroSucursal.addEventListener('change', actualizarFiltros);
+    if (filtroProfesional) filtroProfesional.addEventListener('change', actualizarFiltros);
+    if (filtroEstado) filtroEstado.addEventListener('change', actualizarFiltros);
+
+    // Auto-scroll a hora actual si está en el día de hoy
+    {% if hora_now_top %}
+    const scrollEl = document.querySelector('.cal-scroll');
+    if (scrollEl) {
+      setTimeout(() => {
+        scrollEl.scrollTop = Math.max(0, {{ hora_now_top }} - 200);
+      }, 100);
+    }
+    {% endif %}
+  });
+</script>
+{% endblock %}

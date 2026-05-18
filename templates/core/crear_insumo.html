@@ -1,0 +1,431 @@
+{% extends "core/base.html" %}
+
+{% block title %}Crear Insumo{% endblock %}
+{% block page_title %}Nuevo Insumo{% endblock %}
+{% block page_subtitle %}{% if unidad_negocio %}{{ unidad_negocio.nombre }}{% else %}Registrar un nuevo lote de insumo{% endif %}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .form-container {
+    max-width: 720px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .unidad-context-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--accent-light);
+    border: 1px solid rgba(78, 161, 127, 0.25);
+    padding: 8px 14px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 18px;
+    font-size: 0.82rem;
+    color: var(--accent-hover);
+  }
+  .unidad-context-badge strong { font-weight: 600; }
+
+  .form-group { margin-bottom: 18px; }
+  .form-group:last-child { margin-bottom: 0; }
+  .form-label {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+  .form-label .required { color: #c41c3b; }
+  .form-input, .form-select, .form-textarea {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    background: var(--bg-card);
+    box-sizing: border-box;
+    transition: border-color 0.15s;
+  }
+  .form-input:focus, .form-select:focus, .form-textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(78, 161, 127, 0.1);
+  }
+  .form-input.readonly, .form-input[readonly] {
+    background: #fafaf8;
+    color: var(--text-secondary);
+    cursor: not-allowed;
+  }
+  .form-hint {
+    font-size: 0.73rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+  .form-hint.success { color: var(--accent); }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-row.tres { grid-template-columns: 1fr 1fr 1fr; }
+
+  .form-section-title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-top: 24px;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border);
+  }
+  .form-section-title:first-of-type { margin-top: 0; }
+
+  .form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+  .btn-primary {
+    padding: 10px 24px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-secondary {
+    padding: 10px 24px;
+    background: #f0f0f0;
+    color: var(--text-primary);
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .btn-secondary:hover { background: #e0e0e0; }
+
+  /* SKU preview */
+  .sku-preview-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, var(--accent-light) 0%, #d4ede0 100%);
+    border: 1px solid rgba(78, 161, 127, 0.3);
+    border-radius: var(--radius-sm);
+  }
+  .sku-preview-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent-hover);
+    font-weight: 600;
+  }
+  .sku-preview-value {
+    font-family: 'Courier New', monospace;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent-hover);
+    letter-spacing: 0.05em;
+  }
+  .sku-preview-value.empty {
+    color: var(--text-muted);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 0.85rem;
+  }
+
+  /* Inputs de moneda con prefijo $ */
+  .money-input-wrap {
+    position: relative;
+  }
+  .money-input-wrap::before {
+    content: '$';
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-weight: 500;
+    pointer-events: none;
+    font-size: 0.92rem;
+  }
+  .money-input-wrap input {
+    padding-left: 26px;
+    font-family: 'Courier New', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .messages { margin-bottom: 20px; }
+  .message {
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+  }
+  .message.error {
+    background: #fde4e6;
+    color: #c41c3b;
+    border: 1px solid #f5b3ba;
+  }
+  .message.success {
+    background: #e6f4ee;
+    color: var(--accent);
+    border: 1px solid #b8e6d5;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if messages %}
+  <div class="messages">
+    {% for message in messages %}
+      <div class="message {% if message.tags %}{{ message.tags }}{% endif %}">{{ message }}</div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<div class="form-container">
+  {% if unidad_negocio %}
+    <div class="unidad-context-badge">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/>
+      </svg>
+      <span>Registrando insumo para: <strong>{{ unidad_negocio.nombre }}</strong></span>
+    </div>
+  {% endif %}
+
+  <form method="post" id="form-insumo">
+    {% csrf_token %}
+
+    <!-- ════════════ Producto y fecha ════════════ -->
+    <div class="form-section-title">Producto y fecha</div>
+
+    <div class="form-group">
+      <label class="form-label">
+        Producto <span class="required">*</span>
+      </label>
+      <select name="producto_proveedor" id="producto_proveedor" class="form-select" required>
+        <option value="">-- Selecciona un producto --</option>
+        {% for prod in productos_proveedores %}
+          <option value="{{ prod.id }}" data-nombre="{{ prod.nombre }}" data-unidad="{{ prod.unidad }}">
+            {{ prod.nombre }} ({{ prod.proveedor.nombre }})
+          </option>
+        {% endfor %}
+      </select>
+      <div class="form-hint">El nombre se extrae del catálogo. Si no existe, créalo en Proveedores.</div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">
+          Fecha de compra <span class="required">*</span>
+        </label>
+        <input type="date" name="fecha_compra" id="fecha_compra" class="form-input" required>
+        <div class="form-hint">Define el mes del SKU y se usa para estadísticas mensuales.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Fecha de vencimiento</label>
+        <input type="date" name="fecha_vencimiento" class="form-input">
+        <div class="form-hint">Opcional. Avisamos cuando faltan menos de 30 días.</div>
+      </div>
+    </div>
+
+    <!-- SKU Preview -->
+    <div class="form-group">
+      <label class="form-label">Código SKU (automático)</label>
+      <div class="sku-preview-box">
+        <span class="sku-preview-label">SKU →</span>
+        <span class="sku-preview-value empty" id="sku-preview">Selecciona producto y fecha</span>
+      </div>
+      <div class="form-hint">
+        Formato: <code>XXX</code> (producto) + <code>MMM</code> (mes) + <code>_NNN</code> (correlativo del mes).
+        Se confirma al guardar.
+      </div>
+    </div>
+
+    <!-- ════════════ Costo de compra ════════════ -->
+    <div class="form-section-title">Costo de compra</div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Costo neto</label>
+        <div class="money-input-wrap">
+          <input type="text" name="costo_neto_display" id="costo_neto_display" class="form-input" placeholder="0" inputmode="numeric">
+        </div>
+        <input type="hidden" name="costo_neto" id="costo_neto" value="0">
+        <div class="form-hint">Precio sin IVA. Ingresa solo números, los miles se formatean solos.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Costo con IVA (19%)</label>
+        <div class="money-input-wrap">
+          <input type="text" id="costo_con_iva_display" class="form-input readonly" placeholder="0" readonly>
+        </div>
+        <input type="hidden" name="costo_con_iva" id="costo_con_iva" value="0">
+        <div class="form-hint success">Se calcula automáticamente: neto × 1.19</div>
+      </div>
+    </div>
+
+    <!-- ════════════ Precio venta a profesional ════════════ -->
+    <div class="form-section-title">Precio de venta a profesional</div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Precio venta neto</label>
+        <div class="money-input-wrap">
+          <input type="text" id="precio_venta_neto_display" class="form-input" placeholder="0" inputmode="numeric">
+        </div>
+        <input type="hidden" name="precio_venta_neto" id="precio_venta_neto" value="0">
+        <div class="form-hint">Lo que cobras al profesional sin IVA. Opcional.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Precio venta con IVA</label>
+        <div class="money-input-wrap">
+          <input type="text" id="precio_venta_con_iva_display" class="form-input readonly" placeholder="0" readonly>
+        </div>
+        <input type="hidden" name="precio_venta_con_iva" id="precio_venta_con_iva" value="0">
+        <div class="form-hint success">Se calcula automáticamente: neto × 1.19</div>
+      </div>
+    </div>
+
+    <!-- ════════════ Duración / stock crítico ════════════ -->
+    <div class="form-section-title">Duración estimada (opcional)</div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Tiempo máximo proyectado</label>
+        <input type="text" name="tiempo_maximo_proyectado" class="form-input" placeholder="Ej: 36" inputmode="numeric">
+        <div class="form-hint">Para alertar cuando el stock sea crítico.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Unidad de tiempo</label>
+        <select name="unidad_tiempo" class="form-select">
+          <option value="meses" selected>Meses</option>
+          <option value="dias">Días</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- ════════════ Notas ════════════ -->
+    <div class="form-group">
+      <label class="form-label">Notas</label>
+      <textarea name="descripcion" class="form-textarea" rows="3" placeholder="Notas específicas de este lote (lote del proveedor, condiciones de compra, etc.)"></textarea>
+    </div>
+
+    <!-- ════════════ Acciones ════════════ -->
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">Crear insumo</button>
+      <a href="{% if unidad_negocio %}/insumos/?unidad={{ unidad_negocio.id }}{% else %}{% url 'insumos' %}{% endif %}" class="btn-secondary">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // ── Formato de moneda chileno: 20000 → 20.000 ────────────────────────────
+  function formatearMonto(num) {
+    if (num === '' || num === null || num === undefined) return '';
+    const n = parseInt(String(num).replace(/\D/g, ''), 10);
+    if (isNaN(n)) return '';
+    return n.toLocaleString('es-CL');  // separador miles con punto
+  }
+
+  function parseMonto(str) {
+    if (!str) return 0;
+    return parseInt(String(str).replace(/\D/g, ''), 10) || 0;
+  }
+
+  // Vincular un input "display" (formato $) con un input hidden (valor numérico)
+  // Y calcular automáticamente el con-IVA en otro par display/hidden
+  function vincularMoneda(displayId, hiddenId, ivaDisplayId, ivaHiddenId) {
+    const display = document.getElementById(displayId);
+    const hidden = document.getElementById(hiddenId);
+    const ivaDisplay = ivaDisplayId ? document.getElementById(ivaDisplayId) : null;
+    const ivaHidden = ivaHiddenId ? document.getElementById(ivaHiddenId) : null;
+
+    if (!display || !hidden) return;
+
+    display.addEventListener('input', function(e) {
+      const pos = e.target.selectionStart;
+      const largoAntes = e.target.value.length;
+
+      const numero = parseMonto(e.target.value);
+      e.target.value = formatearMonto(numero);
+      hidden.value = numero;
+
+      // Calcular IVA si corresponde (19% chileno)
+      if (ivaDisplay && ivaHidden) {
+        const conIva = Math.round(numero * 1.19);
+        ivaDisplay.value = formatearMonto(conIva);
+        ivaHidden.value = conIva;
+      }
+
+      // Ajustar cursor
+      const diff = e.target.value.length - largoAntes;
+      try {
+        e.target.setSelectionRange(pos + diff, pos + diff);
+      } catch (err) { /* ignore */ }
+    });
+  }
+
+  vincularMoneda('costo_neto_display', 'costo_neto', 'costo_con_iva_display', 'costo_con_iva');
+  vincularMoneda('precio_venta_neto_display', 'precio_venta_neto', 'precio_venta_con_iva_display', 'precio_venta_con_iva');
+
+  // ── Preview de SKU (AJAX) ────────────────────────────────────────────────
+  const productoSel = document.getElementById('producto_proveedor');
+  const fechaInput = document.getElementById('fecha_compra');
+  const skuPreview = document.getElementById('sku-preview');
+
+  async function actualizarSkuPreview() {
+    const productoId = productoSel.value;
+    const fecha = fechaInput.value;
+
+    if (!productoId || !fecha) {
+      skuPreview.textContent = 'Selecciona producto y fecha';
+      skuPreview.classList.add('empty');
+      return;
+    }
+
+    skuPreview.textContent = 'Calculando...';
+    skuPreview.classList.remove('empty');
+
+    try {
+      const unidadId = '{% if unidad_negocio %}{{ unidad_negocio.id }}{% endif %}';
+      const url = `/insumos/sku-preview/?producto=${encodeURIComponent(productoId)}&fecha=${encodeURIComponent(fecha)}&unidad=${encodeURIComponent(unidadId)}`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data.sku) {
+        skuPreview.textContent = data.sku;
+        skuPreview.classList.remove('empty');
+      } else {
+        skuPreview.textContent = data.error || 'No se pudo generar';
+        skuPreview.classList.add('empty');
+      }
+    } catch (err) {
+      skuPreview.textContent = 'Error al consultar SKU';
+      skuPreview.classList.add('empty');
+    }
+  }
+
+  if (productoSel && fechaInput) {
+    productoSel.addEventListener('change', actualizarSkuPreview);
+    fechaInput.addEventListener('change', actualizarSkuPreview);
+  }
+</script>
+{% endblock %}

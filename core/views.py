@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.http import JsonResponse
 from django.core.mail import send_mail
 from django.conf import settings
+from django.db.models import Q
 
 from .models import (
     Empresa,
@@ -25,6 +26,8 @@ from .models import (
     ServicioInsumo,
     EstructuraComision,
     ComisionCalculada,
+    Proveedor,
+    ProductoProveedor,
 )
 from .utils import obtener_agenda_completa
 
@@ -96,26 +99,43 @@ def agenda_view(request):
     sucursales = Sucursal.objects.filter(activa=True).order_by('nombre')
 
     agenda_general = []
-    horas_base = None
     tiene_horarios_ese_dia = False
+    # Recolectar las horas de TODOS los profesionales para calcular el rango
+    # común (la hora más temprana de cualquiera al inicio, la más tardía al
+    # final). Si solo usáramos las horas del primer profesional, la gutter y
+    # el fondo se cortarían cuando otros profesionales atienden más temprano
+    # o más tarde que él.
+    todas_las_horas = set()
 
     for profesional in profesionales:
         agenda = obtener_agenda_completa(profesional, fecha)
         if agenda:
             tiene_horarios_ese_dia = True
-            if not horas_base:
-                horas_base = [b["hora"] for b in agenda]
+            for b in agenda:
+                todas_las_horas.add(b["hora"])
         agenda_general.append({
             "profesional": profesional,
             "agenda": {b["hora"]: b for b in agenda},
             "tiene_horarios": bool(agenda),
         })
 
-    # Si nadie atiende ese día, calcular rango horario global (09:00-18:00)
-    if not horas_base:
+    if todas_las_horas:
+        # Rango común: del mínimo al máximo, slots de 15 minutos.
+        from datetime import time
+        hora_min = min(todas_las_horas)
+        hora_max = max(todas_las_horas)
+        min_total = hora_min.hour * 60 + hora_min.minute
+        max_total = hora_max.hour * 60 + hora_max.minute
+        horas_base = []
+        m = min_total
+        while m <= max_total:
+            horas_base.append(time(m // 60, m % 60))
+            m += 15
+    else:
+        # Si nadie atiende ese día, mostrar rango global 09:00-18:00
         from datetime import time
         horas_base = [
-            time(h, m) for h in range(9, 18) for m in [0, 15, 30, 45]
+            time(h, mm) for h in range(9, 18) for mm in [0, 15, 30, 45]
         ]
 
     SLOT_H = 28  # px por bloque de 15 minutos
@@ -137,7 +157,13 @@ def agenda_view(request):
         if fecha == date.today():
             now = datetime.now().time()
             now_min = now.hour * 60 + now.minute - base_minutes
-            if now_min > 0:
+            # Solo renderizar la línea si la hora actual está DENTRO del rango
+            # del horario laboral (entre la primera hora y la última de la grilla).
+            # Si son las 22:00 y el horario va 09:00-18:00, no tiene sentido
+            # mostrar la línea — quedaría flotando fuera del grid y causaría
+            # espacio en blanco abajo.
+            max_min_visible = total_slots * 15
+            if 0 < now_min < max_min_visible:
                 hora_now_top = round((now_min / 15) * SLOT_H)
 
         for item in agenda_general:
@@ -830,119 +856,6 @@ def toggle_profesional(request, profesional_id):
     estado = 'activado' if p.activo else 'desactivado'
     messages.success(request, f'Profesional "{p.nombres}" {estado}.')
     return redirect('profesionales')
-
-
-# ── INSUMOS ───────────────────────────────────────────────────────────────
-@login_required
-def insumos_view(request):
-    insumos = Insumo.objects.select_related('unidad_negocio').order_by('nombre')
-    context = {
-        'insumos': insumos,
-        'unidades': UnidadNegocio.objects.filter(activa=True),
-    }
-    return render(request, 'core/insumos.html', context)
-
-
-@login_required
-def crear_insumo(request):
-    if request.method != 'POST':
-        return redirect('insumos')
-    try:
-        unidad = get_object_or_404(UnidadNegocio, id=request.POST.get('unidad_negocio'))
-        nombre = request.POST.get('nombre', '').strip()
-        codigo_sku = request.POST.get('codigo_sku', '').strip()
-
-        if not nombre:
-            messages.error(request, 'El nombre del insumo es requerido.')
-            return redirect('insumos')
-
-        costo = int(request.POST.get('costo_unitario', '0').replace('.', '').replace(',', ''))
-        precio = int(request.POST.get('precio_venta', '0').replace('.', '').replace(',', ''))
-        cantidad = int(request.POST.get('cantidad_disponible', '0'))
-        unidad_medida = request.POST.get('unidad', 'und')
-
-        insumo = Insumo.objects.create(
-            unidad_negocio=unidad,
-            nombre=nombre,
-            codigo_sku=codigo_sku,
-            costo_unitario=costo,
-            precio_venta=precio,
-            cantidad_disponible=cantidad,
-            unidad=unidad_medida,
-            activo=True,
-        )
-        messages.success(request, f'Insumo "{insumo.nombre}" creado.')
-    except Exception as e:
-        messages.error(request, f'Error al crear insumo: {e}')
-    return redirect('insumos')
-
-
-@login_required
-def editar_insumo(request, insumo_id):
-    insumo = get_object_or_404(Insumo, id=insumo_id)
-
-    if request.method == 'POST':
-        try:
-            nombre = request.POST.get('nombre', '').strip()
-            if not nombre:
-                messages.error(request, 'El nombre del insumo es requerido.')
-                return redirect('insumos')
-
-            unidad_id = request.POST.get('unidad_negocio')
-            if unidad_id:
-                insumo.unidad_negocio = get_object_or_404(UnidadNegocio, id=unidad_id)
-
-            insumo.nombre = nombre
-            insumo.codigo_sku = request.POST.get('codigo_sku', '').strip()
-            insumo.costo_unitario = int(request.POST.get('costo_unitario', '0').replace('.', '').replace(',', ''))
-            insumo.precio_venta = int(request.POST.get('precio_venta', '0').replace('.', '').replace(',', ''))
-            insumo.cantidad_disponible = int(request.POST.get('cantidad_disponible', '0'))
-            insumo.unidad = request.POST.get('unidad', 'und')
-            insumo.save()
-
-            messages.success(request, f'Insumo "{insumo.nombre}" actualizado.')
-        except Exception as e:
-            messages.error(request, f'Error al editar insumo: {e}')
-        return redirect('insumos')
-
-    context = {
-        'insumo': insumo,
-        'unidades': UnidadNegocio.objects.filter(activa=True),
-        'editing': True,
-    }
-    return render(request, 'core/insumos.html', context)
-
-
-@login_required
-def toggle_insumo(request, insumo_id):
-    if request.method != 'POST':
-        return redirect('insumos')
-    i = get_object_or_404(Insumo, id=insumo_id)
-    i.activo = not i.activo
-    i.save()
-    estado = 'activado' if i.activo else 'desactivado'
-    messages.success(request, f'Insumo "{i.nombre}" {estado}.')
-    return redirect('insumos')
-
-
-@login_required
-def eliminar_insumo(request, insumo_id):
-    if request.method != 'POST':
-        return redirect('insumos')
-
-    insumo = get_object_or_404(Insumo, id=insumo_id)
-    nombre_insumo = insumo.nombre
-
-    try:
-        if insumo.servicios_usados.exists():
-            messages.error(request, f'No se puede eliminar "{nombre_insumo}" porque está asignado a servicios.')
-        else:
-            insumo.delete()
-            messages.success(request, f'Insumo "{nombre_insumo}" eliminado correctamente.')
-    except Exception as e:
-        messages.error(request, f'Error al eliminar insumo: {e}')
-
-    return redirect('insumos')
 
 
 # ── CATEGORÍAS DE SERVICIO ────────────────────────────────────────────────
@@ -1808,3 +1721,633 @@ def comisiones_todas_view(request):
     }
 
     return render(request, 'core/comisiones_todas.html', context)
+
+
+def generar_sku_avanzado(producto, fecha, unidad_negocio=None):
+    """SKU inteligente — versión mejorada de Insumo.generar_sku.
+
+    Reglas del prefijo del producto (basado en el nombre):
+      * Una palabra (ej: 'Botox') → primeras 3 letras → 'BOT'
+      * Dos palabras (ej: 'Rejeunesse Shape') → 2 primeras de la 1ra + 1ra de la 2da → 'RES'
+      * Tres+ palabras → 1 primera letra de cada (max 3) → 'ACH' para 'Acido Hialuronico Compuesto'
+
+    Acentos y caracteres no alfabéticos se ignoran (Á→A, ç→C, etc).
+
+    Si la unidad de negocio contiene "Imagen" (ej. 'Imagen Mía Servicios'),
+    se antepone una 'I' al SKU completo: 'IBOTMAY_001' en lugar de 'BOTMAY_001'.
+
+    Mes y correlativo siguen la lógica original de Insumo.generar_sku.
+    """
+    if not producto or not fecha:
+        return None
+
+    import unicodedata
+
+    # Normalizar nombre: quitar acentos, mayúsculas, solo alfabéticas y espacios
+    nombre = producto.nombre or ''
+    nombre_norm = unicodedata.normalize('NFKD', nombre)
+    nombre_norm = ''.join(c for c in nombre_norm if not unicodedata.combining(c))
+    nombre_norm = nombre_norm.upper()
+
+    # Solo letras y espacios
+    nombre_limpio = ''.join(c if (c.isalpha() or c == ' ') else '' for c in nombre_norm)
+    palabras = [p for p in nombre_limpio.split() if p]
+
+    if not palabras:
+        prefijo_prod = 'XXX'
+    elif len(palabras) == 1:
+        prefijo_prod = palabras[0][:3].ljust(3, 'X')  # 'BOT', 'BOX' (relleno con X si corto)
+    elif len(palabras) == 2:
+        # 2 primeras letras de la 1ra palabra + 1ra letra de la 2da
+        prefijo_prod = (palabras[0][:2] + palabras[1][:1]).ljust(3, 'X')
+    else:
+        # 1ra letra de cada palabra (hasta 3)
+        prefijo_prod = ''.join(p[:1] for p in palabras[:3]).ljust(3, 'X')
+
+    # Meses en español abreviados
+    meses_es = {
+        1: 'ENE', 2: 'FEB', 3: 'MAR', 4: 'ABR', 5: 'MAY', 6: 'JUN',
+        7: 'JUL', 8: 'AGO', 9: 'SEP', 10: 'OCT', 11: 'NOV', 12: 'DIC',
+    }
+    mes_abr = meses_es.get(fecha.month, 'XXX')
+
+    # Prefijo de unidad de negocio: "I" si es Imagen Mía
+    prefijo_unidad = ''
+    if unidad_negocio and 'imagen' in (unidad_negocio.nombre or '').lower():
+        prefijo_unidad = 'I'
+
+    sku_prefix = f"{prefijo_unidad}{prefijo_prod}{mes_abr}_"
+
+    # Contar insumos con el mismo prefijo para asignar correlativo
+    insumos_mismo = Insumo.objects.filter(codigo_sku__startswith=sku_prefix)
+    if not insumos_mismo.exists():
+        correlativo = 1
+    else:
+        ultimos = []
+        for ins in insumos_mismo:
+            try:
+                ultimos.append(int(ins.codigo_sku.split('_')[-1]))
+            except (ValueError, IndexError):
+                pass
+        correlativo = (max(ultimos) + 1) if ultimos else 1
+
+    return f"{sku_prefix}{correlativo:03d}"
+
+
+# ── INSUMOS ────────────────────────────────────────────────────────────────
+@login_required
+def insumos_view(request):
+    """Vista consolidada de INSUMOS por UnidadNegocio"""
+    unidad_id = request.GET.get('unidad', '')
+    estado_filtro = request.GET.get('estado', '')
+    busqueda = request.GET.get('q', '')
+
+    # Obtener todas las unidades de negocio activas
+    unidades = UnidadNegocio.objects.filter(activa=True).order_by('id')  # 'id' = orden de creación → Sociedad Mia Carro primero
+
+    # Obtener insumos base
+    insumos = Insumo.objects.select_related(
+        'producto_proveedor',
+        'producto_proveedor__proveedor',
+        'unidad_negocio',
+        'paciente'
+    ).order_by('-fecha_creacion')
+
+    # Filtrar por estado (vigente, vencido, vendido, cancelado)
+    if estado_filtro:
+        insumos = insumos.filter(estado=estado_filtro)
+    else:
+        # Por defecto mostrar solo vigentes
+        insumos = insumos.filter(estado='vigente')
+
+    # Filtrar por unidad de negocio
+    if unidad_id:
+        insumos = insumos.filter(unidad_negocio__id=unidad_id)
+
+    # Filtrar por búsqueda (nombre de producto o código SKU)
+    if busqueda:
+        insumos = insumos.filter(
+            Q(codigo_sku__icontains=busqueda) |
+            Q(producto_proveedor__nombre__icontains=busqueda) |
+            Q(producto_proveedor__proveedor__nombre__icontains=busqueda)
+        )
+
+    # Calcular estadísticas
+    total_insumos = insumos.count()
+    total_valor_costo = sum(i.costo_neto * (i.cantidad_disponible or 0) for i in insumos if i.cantidad_disponible)
+    total_valor_venta = sum(i.precio_venta_neto * (i.cantidad_disponible or 0) for i in insumos if i.cantidad_disponible)
+    insumos_por_vencer = insumos.filter(
+        fecha_vencimiento__isnull=False,
+        fecha_vencimiento__lte=date.today() + timedelta(days=30),
+        estado='vigente'
+    ).count()
+
+    # Obtener nombre de la unidad si se filtra
+    unidad_nombre = ''
+    if unidad_id:
+        try:
+            unidad_obj = UnidadNegocio.objects.get(id=unidad_id)
+            unidad_nombre = unidad_obj.nombre
+        except UnidadNegocio.DoesNotExist:
+            pass
+
+    context = {
+        'insumos': insumos,
+        'unidades': unidades,
+        'total_insumos': total_insumos,
+        'total_valor_costo': total_valor_costo,
+        'total_valor_venta': total_valor_venta,
+        'insumos_por_vencer': insumos_por_vencer,
+        'unidad_selected': unidad_id,
+        'unidad_nombre': unidad_nombre,
+        'estado_selected': estado_filtro,
+        'busqueda': busqueda,
+    }
+
+    return render(request, 'core/insumos.html', context)
+
+
+@login_required
+def crear_insumo(request):
+    """Crear nuevo insumo.
+
+    La unidad de negocio NO se pide en el formulario — se toma del query
+    param ?unidad=X (la unidad en la que estaba el usuario al llegar aquí).
+    El SKU se genera automáticamente usando Insumo.generar_sku().
+    La cantidad disponible siempre es 1 (cada insumo es un lote unitario).
+    """
+    unidad_id = request.GET.get('unidad', '')
+
+    # Determinar la unidad de negocio: query param > primera activa
+    unidad_negocio = None
+    if unidad_id:
+        unidad_negocio = UnidadNegocio.objects.filter(id=unidad_id, activa=True).first()
+    if not unidad_negocio:
+        unidad_negocio = UnidadNegocio.objects.filter(activa=True).order_by('id').first()
+
+    if request.method == 'POST':
+        try:
+            producto_proveedor_id = request.POST.get('producto_proveedor')
+            fecha_compra = request.POST.get('fecha_compra')
+            fecha_vencimiento = request.POST.get('fecha_vencimiento', '')
+            costo_neto = int(request.POST.get('costo_neto', 0) or 0)
+            costo_con_iva = int(request.POST.get('costo_con_iva', 0) or 0)
+            precio_venta_neto = int(request.POST.get('precio_venta_neto', 0) or 0)
+            precio_venta_con_iva = int(request.POST.get('precio_venta_con_iva', 0) or 0)
+            tiempo_maximo_proyectado = request.POST.get('tiempo_maximo_proyectado', '')
+            unidad_tiempo = request.POST.get('unidad_tiempo', 'meses')
+            descripcion = request.POST.get('descripcion', '')
+
+            # Validar datos requeridos
+            if not producto_proveedor_id or not fecha_compra:
+                messages.error(request, 'Producto y fecha de compra son obligatorios.')
+                return redirect(f'/insumos/crear/?unidad={unidad_negocio.id}' if unidad_negocio else 'insumos')
+
+            if not unidad_negocio:
+                messages.error(request, 'No hay unidad de negocio activa configurada.')
+                return redirect('insumos')
+
+            producto = get_object_or_404(ProductoProveedor, id=producto_proveedor_id)
+
+            # Si el costo con IVA viene en 0 pero hay neto, calcularlo (IVA 19%)
+            if costo_neto and not costo_con_iva:
+                costo_con_iva = round(costo_neto * 1.19)
+            if precio_venta_neto and not precio_venta_con_iva:
+                precio_venta_con_iva = round(precio_venta_neto * 1.19)
+
+            # Crear insumo (cantidad = 1 fija: cada insumo es un lote unitario)
+            insumo = Insumo(
+                producto_proveedor=producto,
+                unidad_negocio=unidad_negocio,
+                fecha_compra=fecha_compra,
+                fecha_vencimiento=fecha_vencimiento or None,
+                costo_neto=costo_neto,
+                costo_con_iva=costo_con_iva,
+                precio_venta_neto=precio_venta_neto or None,
+                precio_venta_con_iva=precio_venta_con_iva or None,
+                cantidad_disponible=1,
+                unidad=producto.unidad,  # unidad de medida del producto
+                tiempo_maximo_proyectado=tiempo_maximo_proyectado or None,
+                unidad_tiempo=unidad_tiempo,
+                descripcion=descripcion,
+                estado='vigente',
+            )
+
+            # Generar SKU automáticamente
+            from datetime import datetime as dt
+            fecha_obj = dt.strptime(fecha_compra, '%Y-%m-%d').date()
+            insumo.codigo_sku = generar_sku_avanzado(producto, fecha_obj, unidad_negocio)
+
+            insumo.save()
+
+            messages.success(request, f'Insumo {insumo.codigo_sku} creado correctamente.')
+            return redirect(f'/insumos/?unidad={unidad_negocio.id}')
+
+        except Exception as e:
+            messages.error(request, f'Error al crear insumo: {str(e)}')
+            return redirect(f'/insumos/crear/?unidad={unidad_negocio.id}' if unidad_negocio else 'insumos')
+
+    # GET: mostrar formulario
+    productos_proveedores = ProductoProveedor.objects.select_related('proveedor').filter(activo=True).order_by('nombre')
+
+    context = {
+        'productos_proveedores': productos_proveedores,
+        'unidad_negocio': unidad_negocio,
+        'unidad_selected': unidad_id,
+    }
+
+    return render(request, 'core/crear_insumo.html', context)
+
+
+@login_required
+def sku_preview(request):
+    """Endpoint AJAX que devuelve el SKU sugerido para producto+fecha+unidad.
+
+    Uso: GET /insumos/sku-preview/?producto=ID&fecha=YYYY-MM-DD&unidad=ID
+    Respuesta JSON: {"sku": "BOTENE_001"} o {"error": "..."}
+    """
+    producto_id = request.GET.get('producto', '')
+    fecha_str = request.GET.get('fecha', '')
+    unidad_id = request.GET.get('unidad', '')
+
+    if not producto_id or not fecha_str:
+        return JsonResponse({'sku': '', 'error': 'Falta producto o fecha'})
+
+    try:
+        producto = ProductoProveedor.objects.get(id=producto_id)
+        from datetime import datetime as dt
+        fecha = dt.strptime(fecha_str, '%Y-%m-%d').date()
+
+        unidad_negocio = None
+        if unidad_id:
+            unidad_negocio = UnidadNegocio.objects.filter(id=unidad_id).first()
+
+        sku = generar_sku_avanzado(producto, fecha, unidad_negocio)
+        return JsonResponse({'sku': sku or ''})
+    except ProductoProveedor.DoesNotExist:
+        return JsonResponse({'sku': '', 'error': 'Producto no existe'})
+    except ValueError:
+        return JsonResponse({'sku': '', 'error': 'Fecha inválida'})
+    except Exception as e:
+        return JsonResponse({'sku': '', 'error': str(e)})
+
+
+@login_required
+def editar_insumo(request, insumo_id):
+    """Editar insumo existente"""
+    insumo = get_object_or_404(Insumo, id=insumo_id)
+
+    if request.method == 'POST':
+        try:
+            insumo.producto_proveedor_id = request.POST.get('producto_proveedor')
+            insumo.unidad_negocio_id = request.POST.get('unidad_negocio')
+            insumo.fecha_compra = request.POST.get('fecha_compra')
+            insumo.fecha_vencimiento = request.POST.get('fecha_vencimiento') or None
+            insumo.costo_neto = int(request.POST.get('costo_neto', 0))
+            insumo.costo_con_iva = int(request.POST.get('costo_con_iva', 0))
+            insumo.precio_venta_neto = int(request.POST.get('precio_venta_neto', 0))
+            insumo.precio_venta_con_iva = int(request.POST.get('precio_venta_con_iva', 0))
+            insumo.cantidad_disponible = int(request.POST.get('cantidad_disponible', 0))
+            insumo.unidad = request.POST.get('unidad', '')
+            insumo.tiempo_maximo_proyectado = request.POST.get('tiempo_maximo_proyectado') or None
+            insumo.unidad_tiempo = request.POST.get('unidad_tiempo', 'dias')
+            insumo.descripcion = request.POST.get('descripcion', '')
+            insumo.estado = request.POST.get('estado', 'vigente')
+
+            # Transferencia: estado y fecha
+            estado_transf = request.POST.get('estado_transferencia', 'pendiente')
+            fecha_transf = request.POST.get('fecha_transferencia', '')
+            # Si se marca realizada sin fecha → usar hoy
+            if estado_transf == 'realizada' and not fecha_transf:
+                fecha_transf = date.today().isoformat()
+            # Si se vuelve a pendiente, limpiar la fecha
+            if estado_transf == 'pendiente':
+                fecha_transf = ''
+            insumo.estado_transferencia = estado_transf
+            insumo.fecha_transferencia = fecha_transf or None
+
+            insumo.save()
+
+            messages.success(request, f'Insumo {insumo.codigo_sku} actualizado correctamente.')
+            return redirect('insumos')
+
+        except Exception as e:
+            messages.error(request, f'Error al actualizar insumo: {str(e)}')
+
+    # GET: mostrar formulario
+    productos_proveedores = ProductoProveedor.objects.select_related('proveedor').filter(activo=True).order_by('nombre')
+    unidades_negocio = UnidadNegocio.objects.filter(activa=True).order_by('nombre')
+
+    context = {
+        'insumo': insumo,
+        'productos_proveedores': productos_proveedores,
+        'unidades_negocio': unidades_negocio,
+    }
+
+    return render(request, 'core/editar_insumo.html', context)
+
+
+@login_required
+def toggle_insumo(request, insumo_id):
+    """Activar/desactivar insumo (cambia estado vigente/terminado)"""
+    insumo = get_object_or_404(Insumo, id=insumo_id)
+
+    if request.method == 'POST':
+        try:
+            if insumo.estado == 'terminado':
+                insumo.estado = 'vigente'
+                messages.success(request, f'Insumo {insumo.codigo_sku} reactivado.')
+            else:
+                insumo.estado = 'terminado'
+                messages.success(request, f'Insumo {insumo.codigo_sku} marcado como terminado.')
+
+            insumo.save()
+        except Exception as e:
+            messages.error(request, f'Error al cambiar estado: {str(e)}')
+
+    return redirect('insumos')
+
+
+@login_required
+def eliminar_insumo(request, insumo_id):
+    """Eliminar insumo (en realidad cambia estado)"""
+    return toggle_insumo(request, insumo_id)
+
+
+# ── PROVEEDORES ────────────────────────────────────────────────────────────
+@login_required
+def proveedores_view(request):
+    """Listado de proveedores con sus productos asociados"""
+    busqueda = request.GET.get('q', '').strip()
+    estado_filtro = request.GET.get('estado', '')
+
+    proveedores = Proveedor.objects.prefetch_related('productos').order_by('nombre')
+
+    if busqueda:
+        proveedores = proveedores.filter(
+            Q(nombre__icontains=busqueda) |
+            Q(razon_social__icontains=busqueda) |
+            Q(rut__icontains=busqueda) |
+            Q(contacto__icontains=busqueda)
+        )
+
+    if estado_filtro == 'activos':
+        proveedores = proveedores.filter(activo=True)
+    elif estado_filtro == 'inactivos':
+        proveedores = proveedores.filter(activo=False)
+
+    total_proveedores = proveedores.count()
+    total_activos = proveedores.filter(activo=True).count()
+
+    context = {
+        'proveedores': proveedores,
+        'total_proveedores': total_proveedores,
+        'total_activos': total_activos,
+        'busqueda': busqueda,
+        'estado_selected': estado_filtro,
+    }
+    return render(request, 'core/proveedores.html', context)
+
+
+@login_required
+def crear_proveedor(request):
+    if request.method != 'POST':
+        return redirect('proveedores')
+    try:
+        nombre = request.POST.get('nombre', '').strip()
+        if not nombre:
+            messages.error(request, 'El nombre del proveedor es requerido.')
+            return redirect('proveedores')
+
+        empresa = Empresa.objects.filter(activa=True).first()
+        if not empresa:
+            messages.error(request, 'No hay empresa activa configurada. Revisa el admin.')
+            return redirect('proveedores')
+
+        if Proveedor.objects.filter(empresa=empresa, nombre__iexact=nombre).exists():
+            messages.error(request, f'Ya existe un proveedor con el nombre "{nombre}".')
+            return redirect('proveedores')
+
+        proveedor = Proveedor.objects.create(
+            empresa=empresa,
+            nombre=nombre,
+            razon_social=request.POST.get('razon_social', '').strip(),
+            rut=request.POST.get('rut', '').strip(),
+            telefono=request.POST.get('telefono', '').strip(),
+            email=request.POST.get('email', '').strip(),
+            contacto=request.POST.get('contacto', '').strip(),
+            activo=True,
+        )
+        messages.success(request, f'Proveedor "{proveedor.nombre}" creado correctamente.')
+    except Exception as e:
+        messages.error(request, f'Error al crear proveedor: {e}')
+    return redirect('proveedores')
+
+
+@login_required
+def editar_proveedor(request, proveedor_id):
+    proveedor = get_object_or_404(Proveedor, id=proveedor_id)
+    if request.method != 'POST':
+        return redirect('proveedores')
+    try:
+        nombre = request.POST.get('nombre', '').strip()
+        if not nombre:
+            messages.error(request, 'El nombre del proveedor es requerido.')
+            return redirect('proveedores')
+
+        if Proveedor.objects.filter(
+            empresa=proveedor.empresa, nombre__iexact=nombre
+        ).exclude(id=proveedor.id).exists():
+            messages.error(request, f'Ya existe otro proveedor con el nombre "{nombre}".')
+            return redirect('proveedores')
+
+        proveedor.nombre = nombre
+        proveedor.razon_social = request.POST.get('razon_social', '').strip()
+        proveedor.rut = request.POST.get('rut', '').strip()
+        proveedor.telefono = request.POST.get('telefono', '').strip()
+        proveedor.email = request.POST.get('email', '').strip()
+        proveedor.contacto = request.POST.get('contacto', '').strip()
+        proveedor.save()
+        messages.success(request, f'Proveedor "{proveedor.nombre}" actualizado.')
+    except Exception as e:
+        messages.error(request, f'Error al editar proveedor: {e}')
+    return redirect('proveedores')
+
+
+@login_required
+def toggle_proveedor(request, proveedor_id):
+    if request.method != 'POST':
+        return redirect('proveedores')
+    p = get_object_or_404(Proveedor, id=proveedor_id)
+    p.activo = not p.activo
+    p.save()
+    estado = 'activado' if p.activo else 'desactivado'
+    messages.success(request, f'Proveedor "{p.nombre}" {estado}.')
+    return redirect('proveedores')
+
+
+@login_required
+def eliminar_proveedor(request, proveedor_id):
+    if request.method != 'POST':
+        return redirect('proveedores')
+    proveedor = get_object_or_404(Proveedor, id=proveedor_id)
+    nombre = proveedor.nombre
+    try:
+        tiene_insumos = Insumo.objects.filter(
+            producto_proveedor__proveedor=proveedor
+        ).exists()
+        if tiene_insumos:
+            messages.error(
+                request,
+                f'No se puede eliminar "{nombre}" porque tiene insumos registrados. '
+                'Desactivalo en lugar de eliminarlo.'
+            )
+        else:
+            proveedor.delete()
+            messages.success(request, f'Proveedor "{nombre}" eliminado.')
+    except Exception as e:
+        messages.error(request, f'Error al eliminar proveedor: {e}')
+    return redirect('proveedores')
+
+
+# ── PRODUCTOS DEL PROVEEDOR ────────────────────────────────────────────────
+@login_required
+def productos_proveedor_view(request):
+    """Listado de productos que ofrecen los proveedores"""
+    proveedor_id = request.GET.get('proveedor', '')
+    busqueda = request.GET.get('q', '').strip()
+    estado_filtro = request.GET.get('estado', '')
+
+    productos = ProductoProveedor.objects.select_related('proveedor').order_by(
+        'proveedor__nombre', 'nombre'
+    )
+
+    if proveedor_id:
+        productos = productos.filter(proveedor_id=proveedor_id)
+    if busqueda:
+        productos = productos.filter(
+            Q(nombre__icontains=busqueda) |
+            Q(proveedor__nombre__icontains=busqueda) |
+            Q(descripcion__icontains=busqueda)
+        )
+    if estado_filtro == 'activos':
+        productos = productos.filter(activo=True)
+    elif estado_filtro == 'inactivos':
+        productos = productos.filter(activo=False)
+
+    proveedor_nombre = ''
+    if proveedor_id:
+        try:
+            proveedor_nombre = Proveedor.objects.get(id=proveedor_id).nombre
+        except Proveedor.DoesNotExist:
+            pass
+
+    context = {
+        'productos': productos,
+        'proveedores': Proveedor.objects.filter(activo=True).order_by('nombre'),
+        'proveedor_selected': proveedor_id,
+        'proveedor_nombre': proveedor_nombre,
+        'busqueda': busqueda,
+        'estado_selected': estado_filtro,
+        'total_productos': productos.count(),
+    }
+    return render(request, 'core/productos_proveedor.html', context)
+
+
+@login_required
+def crear_producto_proveedor(request):
+    if request.method != 'POST':
+        return redirect('productos_proveedor')
+    try:
+        proveedor = get_object_or_404(Proveedor, id=request.POST.get('proveedor'))
+        nombre = request.POST.get('nombre', '').strip()
+
+        if not nombre:
+            messages.error(request, 'El nombre del producto es requerido.')
+            return redirect('productos_proveedor')
+
+        if ProductoProveedor.objects.filter(proveedor=proveedor, nombre__iexact=nombre).exists():
+            messages.error(
+                request,
+                f'El proveedor "{proveedor.nombre}" ya tiene un producto llamado "{nombre}".'
+            )
+            return redirect('productos_proveedor')
+
+        producto = ProductoProveedor.objects.create(
+            proveedor=proveedor,
+            nombre=nombre,
+            descripcion=request.POST.get('descripcion', '').strip(),
+            unidad=request.POST.get('unidad', 'unidad'),
+            activo=True,
+        )
+        messages.success(request, f'Producto "{producto.nombre}" agregado a {proveedor.nombre}.')
+    except Exception as e:
+        messages.error(request, f'Error al crear producto: {e}')
+    return redirect('productos_proveedor')
+
+
+@login_required
+def editar_producto_proveedor(request, producto_id):
+    producto = get_object_or_404(ProductoProveedor, id=producto_id)
+    if request.method != 'POST':
+        return redirect('productos_proveedor')
+    try:
+        nombre = request.POST.get('nombre', '').strip()
+        if not nombre:
+            messages.error(request, 'El nombre del producto es requerido.')
+            return redirect('productos_proveedor')
+
+        proveedor_id = request.POST.get('proveedor')
+        if proveedor_id:
+            producto.proveedor = get_object_or_404(Proveedor, id=proveedor_id)
+
+        if ProductoProveedor.objects.filter(
+            proveedor=producto.proveedor, nombre__iexact=nombre
+        ).exclude(id=producto.id).exists():
+            messages.error(
+                request,
+                f'El proveedor ya tiene otro producto llamado "{nombre}".'
+            )
+            return redirect('productos_proveedor')
+
+        producto.nombre = nombre
+        producto.descripcion = request.POST.get('descripcion', '').strip()
+        producto.unidad = request.POST.get('unidad', 'unidad')
+        producto.save()
+        messages.success(request, f'Producto "{producto.nombre}" actualizado.')
+    except Exception as e:
+        messages.error(request, f'Error al editar producto: {e}')
+    return redirect('productos_proveedor')
+
+
+@login_required
+def toggle_producto_proveedor(request, producto_id):
+    if request.method != 'POST':
+        return redirect('productos_proveedor')
+    p = get_object_or_404(ProductoProveedor, id=producto_id)
+    p.activo = not p.activo
+    p.save()
+    estado = 'activado' if p.activo else 'desactivado'
+    messages.success(request, f'Producto "{p.nombre}" {estado}.')
+    return redirect('productos_proveedor')
+
+
+@login_required
+def eliminar_producto_proveedor(request, producto_id):
+    if request.method != 'POST':
+        return redirect('productos_proveedor')
+    producto = get_object_or_404(ProductoProveedor, id=producto_id)
+    nombre = producto.nombre
+    try:
+        if producto.insumos.exists():
+            messages.error(
+                request,
+                f'No se puede eliminar "{nombre}" porque tiene insumos registrados. '
+                'Desactivalo en lugar de eliminarlo.'
+            )
+        else:
+            producto.delete()
+            messages.success(request, f'Producto "{nombre}" eliminado.')
+    except Exception as e:
+        messages.error(request, f'Error al eliminar producto: {e}')
+    return redirect('productos_proveedor')

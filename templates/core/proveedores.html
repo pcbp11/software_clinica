@@ -1,0 +1,584 @@
+{% extends "core/base.html" %}
+
+{% block title %}Proveedores{% endblock %}
+{% block page_title %}Proveedores{% endblock %}
+{% block page_subtitle %}Gestion de proveedores e inventario de productos{% endblock %}
+
+{% block extra_head %}
+<style>
+  .badge-activa {
+    background: var(--accent-light); color: var(--accent);
+    padding: 3px 9px; border-radius: 20px; font-size: 0.73rem; font-weight: 500;
+  }
+  .badge-inactiva {
+    background: #f0f0f0; color: var(--text-muted);
+    padding: 3px 9px; border-radius: 20px; font-size: 0.73rem; font-weight: 500;
+  }
+  .prov-row-header {
+    display: grid;
+    grid-template-columns: 30px 1fr 140px 140px 90px 160px;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: #fafaf8;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+  }
+  .prov-row {
+    display: grid;
+    grid-template-columns: 30px 1fr 140px 140px 90px 160px;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    transition: background 0.12s;
+    cursor: pointer;
+  }
+  .prov-row:hover { background: #fafaf8; }
+  .prov-row.expanded { background: #f5faf7; }
+  .prov-info-main { display: flex; flex-direction: column; gap: 2px; }
+  .prov-nombre { font-weight: 500; color: var(--text-primary); font-size: 0.9rem; }
+  .prov-razon { font-size: 0.74rem; color: var(--text-muted); }
+  .prov-rut { font-family: 'Courier New', monospace; font-size: 0.78rem; color: var(--text-secondary); }
+  .prov-contacto { font-size: 0.78rem; color: var(--text-secondary); }
+  .prov-tel { font-size: 0.72rem; color: var(--text-muted); margin-top: 1px; }
+  .prov-productos-count {
+    display: inline-block; background: #f4eada; color: #8d6c1d;
+    padding: 2px 9px; border-radius: 10px; font-size: 0.72rem; font-weight: 600;
+  }
+  .toggle-chevron {
+    transition: transform 0.2s;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .toggle-chevron.open { transform: rotate(90deg); color: var(--accent); }
+
+  /* Sub-tabla de productos */
+  .productos-section {
+    display: none;
+    background: #fbfaf6;
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px 14px 56px;
+  }
+  .productos-section.open { display: block; }
+  .productos-header {
+    display: grid;
+    grid-template-columns: 1.6fr 1.4fr 90px 90px 120px;
+    gap: 10px;
+    padding: 6px 12px;
+    font-size: 0.66rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    margin-bottom: 4px;
+  }
+  .producto-row-mini {
+    display: grid;
+    grid-template-columns: 1.6fr 1.4fr 90px 90px 120px;
+    gap: 10px;
+    padding: 8px 12px;
+    align-items: center;
+    background: #fff;
+    border-radius: 6px;
+    margin-bottom: 4px;
+    font-size: 0.82rem;
+    border: 1px solid rgba(0,0,0,0.04);
+  }
+  .producto-row-mini:hover { background: #fafaf8; }
+  .producto-nombre-mini { font-weight: 500; color: var(--text-primary); }
+  .producto-desc-mini { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
+  .badge-unidad-mini {
+    display: inline-block; background: #e6e8f4; color: #4b5a9e;
+    padding: 2px 9px; border-radius: 10px; font-size: 0.7rem; font-weight: 500;
+  }
+  .btn-agregar-producto {
+    margin-top: 10px;
+    padding: 8px 16px;
+    background: var(--accent-light);
+    color: var(--accent);
+    border: 1px dashed var(--accent);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+  .btn-agregar-producto:hover {
+    background: var(--accent);
+    color: #fff;
+    border-style: solid;
+  }
+  .productos-empty {
+    padding: 14px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-style: italic;
+  }
+
+  /* Modales */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.3); z-index: 999;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal-content {
+    background: white; border-radius: 8px;
+    width: 90%; max-width: 520px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    padding: 24px;
+    animation: slideUp 0.2s ease-out;
+    max-height: 90vh; overflow-y: auto;
+  }
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-group { margin-bottom: 14px; }
+  .form-group label {
+    display: block; font-size: 0.78rem; font-weight: 500;
+    margin-bottom: 5px; color: var(--text-primary);
+  }
+  .form-group input, .form-group select, .form-group textarea {
+    width: 100%; padding: 9px 12px;
+    border: 1px solid var(--border); border-radius: 6px;
+    font-size: 0.88rem; font-family: inherit; box-sizing: border-box;
+  }
+  .form-group textarea { resize: vertical; min-height: 60px; }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(61, 132, 104, 0.1);
+  }
+  .btn-primary {
+    background: var(--accent); color: white; padding: 10px 20px;
+    border: none; border-radius: 6px; font-weight: 500; cursor: pointer; font-size: 0.9rem;
+  }
+  .btn-secondary {
+    background: #f0f0f0; color: var(--text-primary); padding: 10px 20px;
+    border: none; border-radius: 6px; font-weight: 500; cursor: pointer; font-size: 0.9rem;
+  }
+  .modal-buttons {
+    display: flex; gap: 12px; justify-content: flex-end; margin-top: 18px;
+  }
+  .toggle-form { display: inline; }
+  .btn-ghost {
+    background: transparent; border: none; cursor: pointer; padding: 6px;
+    color: var(--text-secondary);
+  }
+  .btn-ghost:hover { color: var(--accent); }
+  .btn-ghost.danger:hover { color: #c41c3b; }
+
+  .stats-mini {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px; margin-bottom: 20px;
+  }
+  .stat-mini {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 14px 16px;
+  }
+  .stat-mini-label {
+    font-size: 0.69rem; font-weight: 500; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px;
+  }
+  .stat-mini-value {
+    font-family: var(--font-display); font-size: 1.6rem; font-weight: 300;
+    color: var(--text-primary); line-height: 1;
+  }
+  .filters-bar {
+    display: flex; gap: 12px; padding: 12px 16px 0;
+    flex-wrap: wrap; align-items: center;
+  }
+  .filters-bar input, .filters-bar select {
+    padding: 8px 12px; border: 1px solid var(--border);
+    border-radius: 6px; font-size: 0.82rem; font-family: inherit;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="stats-mini">
+  <div class="stat-mini">
+    <div class="stat-mini-label">Total Proveedores</div>
+    <div class="stat-mini-value">{{ total_proveedores }}</div>
+  </div>
+  <div class="stat-mini">
+    <div class="stat-mini-label">Activos</div>
+    <div class="stat-mini-value">{{ total_activos }}</div>
+  </div>
+  <div class="stat-mini">
+    <div class="stat-mini-label">Tip</div>
+    <div class="stat-mini-value" style="font-size: 0.85rem; padding-top: 4px; color: var(--text-secondary);">
+      Click en una fila para ver sus productos
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">Lista de proveedores</span>
+    <button onclick="abrirModalProveedor()" class="btn btn-primary" style="font-size: 0.85rem;">
+      + Nuevo proveedor
+    </button>
+  </div>
+
+  <form method="get" class="filters-bar">
+    <input type="text" name="q" placeholder="Buscar por nombre, RUT, contacto..." value="{{ busqueda }}" style="width: 280px;">
+    <select name="estado">
+      <option value="">Todos los estados</option>
+      <option value="activos" {% if estado_selected == "activos" %}selected{% endif %}>Activos</option>
+      <option value="inactivos" {% if estado_selected == "inactivos" %}selected{% endif %}>Inactivos</option>
+    </select>
+    <button type="submit" class="btn-primary" style="padding: 8px 16px; font-size: 0.82rem;">Filtrar</button>
+    {% if busqueda or estado_selected %}
+      <a href="{% url 'proveedores' %}" style="font-size: 0.82rem; color: var(--text-muted);">Limpiar</a>
+    {% endif %}
+  </form>
+
+  {% if proveedores %}
+    <div class="prov-row-header">
+      <div></div>
+      <div>Proveedor</div>
+      <div>RUT</div>
+      <div>Contacto</div>
+      <div style="text-align: center;">Productos</div>
+      <div style="text-align: right;">Acciones</div>
+    </div>
+    {% for p in proveedores %}
+    <div>
+      <div class="prov-row" onclick="toggleProductos({{ p.id }}, event)" id="prov-row-{{ p.id }}">
+        <div class="toggle-chevron" id="chevron-{{ p.id }}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+        <div class="prov-info-main">
+          <div class="prov-nombre">{{ p.nombre }}</div>
+          {% if p.razon_social %}<div class="prov-razon">{{ p.razon_social }}</div>{% endif %}
+        </div>
+        <div class="prov-rut">{{ p.rut|default:"-" }}</div>
+        <div>
+          <div class="prov-contacto">{{ p.contacto|default:"-" }}</div>
+          {% if p.telefono %}<div class="prov-tel">{{ p.telefono }}</div>{% endif %}
+        </div>
+        <div style="text-align: center;">
+          <span class="prov-productos-count">{{ p.productos.count }}</span>
+        </div>
+        <div style="display: flex; gap: 6px; justify-content: flex-end; align-items: center;" onclick="event.stopPropagation();">
+          {% if p.activo %}
+            <span class="badge-activa">Activo</span>
+          {% else %}
+            <span class="badge-inactiva">Inactivo</span>
+          {% endif %}
+          <button onclick="event.stopPropagation(); editarProveedor({{ p.id }}, '{{ p.nombre|escapejs }}', '{{ p.razon_social|escapejs }}', '{{ p.rut|escapejs }}', '{{ p.telefono|escapejs }}', '{{ p.email|escapejs }}', '{{ p.contacto|escapejs }}')"
+                  class="btn-ghost" title="Editar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+            </svg>
+          </button>
+          <form method="post" action="{% url 'toggle_proveedor' p.id %}" class="toggle-form" onclick="event.stopPropagation();">
+            {% csrf_token %}
+            <button type="submit" class="btn-ghost" title="{% if p.activo %}Desactivar{% else %}Activar{% endif %}">
+              {% if p.activo %}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                </svg>
+              {% else %}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              {% endif %}
+            </button>
+          </form>
+          <form method="post" action="{% url 'eliminar_proveedor' p.id %}" class="toggle-form"
+                onclick="event.stopPropagation();"
+                onsubmit="return confirm('Eliminar proveedor &quot;{{ p.nombre|escapejs }}&quot;? Solo se puede si no tiene insumos asociados.');">
+            {% csrf_token %}
+            <button type="submit" class="btn-ghost danger" title="Eliminar">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Sub-tabla de productos (expandible) -->
+      <div class="productos-section" id="productos-{{ p.id }}">
+        {% if p.productos.all %}
+          <div class="productos-header">
+            <div>Producto</div>
+            <div>Descripcion</div>
+            <div style="text-align: center;">Unidad</div>
+            <div style="text-align: center;">Estado</div>
+            <div style="text-align: right;">Acciones</div>
+          </div>
+          {% for prod in p.productos.all %}
+            <div class="producto-row-mini">
+              <div>
+                <div class="producto-nombre-mini">{{ prod.nombre }}</div>
+              </div>
+              <div>
+                <div class="producto-desc-mini">{{ prod.descripcion|default:"Sin descripcion"|truncatewords:10 }}</div>
+              </div>
+              <div style="text-align: center;">
+                <span class="badge-unidad-mini">{{ prod.get_unidad_display }}</span>
+              </div>
+              <div style="text-align: center;">
+                {% if prod.activo %}
+                  <span class="badge-activa">Activo</span>
+                {% else %}
+                  <span class="badge-inactiva">Inactivo</span>
+                {% endif %}
+              </div>
+              <div style="display: flex; gap: 4px; justify-content: flex-end; align-items: center;">
+                <button onclick="editarProducto({{ prod.id }}, {{ p.id }}, '{{ prod.nombre|escapejs }}', '{{ prod.descripcion|escapejs }}', '{{ prod.unidad }}')"
+                        class="btn-ghost" title="Editar">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+                  </svg>
+                </button>
+                <form method="post" action="{% url 'toggle_producto_proveedor' prod.id %}" class="toggle-form">
+                  {% csrf_token %}
+                  <button type="submit" class="btn-ghost" title="{% if prod.activo %}Desactivar{% else %}Activar{% endif %}">
+                    {% if prod.activo %}
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                      </svg>
+                    {% else %}
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    {% endif %}
+                  </button>
+                </form>
+                <form method="post" action="{% url 'eliminar_producto_proveedor' prod.id %}" class="toggle-form"
+                      onsubmit="return confirm('Eliminar producto &quot;{{ prod.nombre|escapejs }}&quot;? Solo se puede si no tiene insumos asociados.');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn-ghost danger" title="Eliminar">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                  </button>
+                </form>
+              </div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <div class="productos-empty">
+            Este proveedor todavia no tiene productos en el catalogo.
+          </div>
+        {% endif %}
+        <button class="btn-agregar-producto" onclick="abrirModalProducto({{ p.id }}, '{{ p.nombre|escapejs }}')">
+          + Agregar producto a {{ p.nombre|truncatechars:30 }}
+        </button>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div style="padding: 56px 24px; text-align: center;">
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:0.18; margin:0 auto 14px;">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+      </svg>
+      <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 14px;">
+        {% if busqueda or estado_selected %}No se encontraron proveedores con esos filtros.{% else %}No hay proveedores registrados.{% endif %}
+      </p>
+      <button onclick="abrirModalProveedor()" class="btn-primary" style="font-size: 0.85rem;">Agregar primer proveedor</button>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Modal Proveedor -->
+<div id="modal-proveedor" class="modal-overlay">
+  <div class="modal-content">
+    <h2 id="modal-title-prov" style="margin-bottom: 18px; font-size: 1.1rem;">Nuevo proveedor</h2>
+    <form id="form-proveedor" method="post">
+      {% csrf_token %}
+      <div class="form-group">
+        <label for="nombre">Nombre comercial <span style="color:#c41c3b;">*</span></label>
+        <input type="text" id="nombre" name="nombre" required placeholder="Ej: Allergan, Galderma...">
+      </div>
+      <div class="form-group">
+        <label for="razon_social">Razon social</label>
+        <input type="text" id="razon_social" name="razon_social" placeholder="Razon social legal">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="rut">RUT</label>
+          <input type="text" id="rut" name="rut" placeholder="76.123.456-7" maxlength="12">
+        </div>
+        <div class="form-group">
+          <label for="telefono">Telefono</label>
+          <input type="text" id="telefono" name="telefono" placeholder="+56 9 1234 5678">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" placeholder="contacto@proveedor.cl">
+      </div>
+      <div class="form-group">
+        <label for="contacto">Persona de contacto</label>
+        <input type="text" id="contacto" name="contacto" placeholder="Ej: Juan Perez (Ventas)">
+      </div>
+      <div class="modal-buttons">
+        <button type="button" class="btn-secondary" onclick="cerrarModalProveedor()">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal Producto -->
+<div id="modal-producto" class="modal-overlay">
+  <div class="modal-content">
+    <h2 id="modal-title-prod" style="margin-bottom: 6px; font-size: 1.1rem;">Nuevo producto</h2>
+    <p id="modal-prov-context" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 16px;"></p>
+    <form id="form-producto" method="post">
+      {% csrf_token %}
+      <input type="hidden" id="prod-proveedor" name="proveedor">
+      <div class="form-group">
+        <label for="prod-nombre">Nombre del producto <span style="color:#c41c3b;">*</span></label>
+        <input type="text" id="prod-nombre" name="nombre" required placeholder="Ej: Botox 100U, Acido Hialuronico 1ml...">
+      </div>
+      <div class="form-group">
+        <label for="prod-unidad">Unidad de medida</label>
+        <select id="prod-unidad" name="unidad">
+          <option value="unidad">Unidad</option>
+          <option value="ml">ml</option>
+          <option value="gr">gr</option>
+          <option value="caja">Caja</option>
+          <option value="botella">Botella</option>
+          <option value="jeringa">Jeringa</option>
+          <option value="ampolla">Ampolla</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="prod-desc">Descripcion</label>
+        <textarea id="prod-desc" name="descripcion" placeholder="Detalles del producto, presentacion, etc."></textarea>
+      </div>
+      <div class="modal-buttons">
+        <button type="button" class="btn-secondary" onclick="cerrarModalProducto()">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // ── Toggle de productos expandibles ────────────────────────────────────
+  function toggleProductos(provId, event) {
+    // Ignorar si el click fue en botones de acción
+    if (event && event.target.closest('form') || event && event.target.closest('button')) return;
+    const section = document.getElementById('productos-' + provId);
+    const chevron = document.getElementById('chevron-' + provId);
+    const row = document.getElementById('prov-row-' + provId);
+    if (!section) return;
+    section.classList.toggle('open');
+    chevron.classList.toggle('open');
+    row.classList.toggle('expanded');
+  }
+
+  // ── Modal Proveedor ────────────────────────────────────────────────────
+  function abrirModalProveedor() {
+    document.getElementById('form-proveedor').action = "{% url 'crear_proveedor' %}";
+    document.getElementById('modal-title-prov').textContent = 'Nuevo proveedor';
+    document.getElementById('form-proveedor').reset();
+    document.getElementById('modal-proveedor').classList.add('active');
+  }
+
+  function editarProveedor(id, nombre, razon, rut, tel, email, contacto) {
+    document.getElementById('form-proveedor').action = "{% url 'editar_proveedor' 0 %}".replace('0', id);
+    document.getElementById('modal-title-prov').textContent = 'Editar proveedor';
+    document.getElementById('nombre').value = nombre;
+    document.getElementById('razon_social').value = razon;
+    document.getElementById('rut').value = formatearRut(rut);
+    document.getElementById('telefono').value = tel;
+    document.getElementById('email').value = email;
+    document.getElementById('contacto').value = contacto;
+    document.getElementById('modal-proveedor').classList.add('active');
+  }
+
+  function cerrarModalProveedor() {
+    document.getElementById('modal-proveedor').classList.remove('active');
+  }
+
+  document.getElementById('modal-proveedor').addEventListener('click', function(e) {
+    if (e.target === this) cerrarModalProveedor();
+  });
+
+  // ── Modal Producto ─────────────────────────────────────────────────────
+  function abrirModalProducto(proveedorId, proveedorNombre) {
+    document.getElementById('form-producto').action = "{% url 'crear_producto_proveedor' %}";
+    document.getElementById('modal-title-prod').textContent = 'Nuevo producto';
+    document.getElementById('modal-prov-context').textContent = 'Para: ' + proveedorNombre;
+    document.getElementById('form-producto').reset();
+    document.getElementById('prod-proveedor').value = proveedorId;
+    document.getElementById('modal-producto').classList.add('active');
+  }
+
+  function editarProducto(prodId, proveedorId, nombre, descripcion, unidad) {
+    document.getElementById('form-producto').action = "{% url 'editar_producto_proveedor' 0 %}".replace('0', prodId);
+    document.getElementById('modal-title-prod').textContent = 'Editar producto';
+    document.getElementById('modal-prov-context').textContent = '';
+    document.getElementById('prod-proveedor').value = proveedorId;
+    document.getElementById('prod-nombre').value = nombre;
+    document.getElementById('prod-desc').value = descripcion;
+    document.getElementById('prod-unidad').value = unidad;
+    document.getElementById('modal-producto').classList.add('active');
+  }
+
+  function cerrarModalProducto() {
+    document.getElementById('modal-producto').classList.remove('active');
+  }
+
+  document.getElementById('modal-producto').addEventListener('click', function(e) {
+    if (e.target === this) cerrarModalProducto();
+  });
+
+  // ── Auto-formateo del RUT chileno ──────────────────────────────────────
+  function formatearRut(rut) {
+    rut = (rut || '').replace(/[^0-9kK]/g, '').toUpperCase();
+    if (rut.length === 0) return '';
+    if (rut.length === 1) return rut;
+    const cuerpo = rut.slice(0, -1);
+    const dv = rut.slice(-1);
+    const cuerpoConPuntos = cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return cuerpoConPuntos + '-' + dv;
+  }
+
+  const inputRut = document.getElementById('rut');
+  if (inputRut) {
+    inputRut.addEventListener('input', function(e) {
+      const posCursor = e.target.selectionStart;
+      const largoAntes = e.target.value.length;
+      e.target.value = formatearRut(e.target.value);
+      const largoDespues = e.target.value.length;
+      const diff = largoDespues - largoAntes;
+      e.target.setSelectionRange(posCursor + diff, posCursor + diff);
+    });
+    inputRut.addEventListener('blur', function(e) {
+      const v = e.target.value.replace(/[^0-9kK]/g, '');
+      if (v.length > 0 && v.length < 8) {
+        e.target.style.borderColor = '#c41c3b';
+      } else {
+        e.target.style.borderColor = '';
+      }
+    });
+  }
+</script>
+{% endblock %}

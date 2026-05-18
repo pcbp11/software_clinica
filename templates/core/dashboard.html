@@ -2,7 +2,7 @@
 {% load clinica_tags %}
 
 {% block title %}Dashboard{% endblock %}
-{% block page_title %}Buen día, {{ request.user.first_name|default:"equipo" }}{% endblock %}
+{% block page_title %}Hola, {{ request.user.first_name|default:"equipo" }}{% endblock %}
 {% block page_subtitle %}{{ hoy|date:"l j \d\e F, Y" }}{% endblock %}
 
 {% block topbar_actions %}
@@ -14,228 +14,502 @@
   </a>
 {% endblock %}
 
+{% block extra_head %}
+<style>
+  /* ── Stat Cards Modernos (estilo Pomba) ─────────────────────────────── */
+  .dash-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 18px;
+    margin-bottom: 28px;
+  }
+  .dash-stat {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 22px 24px;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .dash-stat:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 28px rgba(30,40,69,0.08);
+    border-color: rgba(78,161,127,0.2);
+  }
+  .dash-stat-label {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .dash-stat-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .dash-stat-number {
+    font-family: var(--font-display);
+    font-size: 2.1rem;
+    font-weight: 300;
+    color: var(--text-primary);
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+  .dash-stat-number.money { font-size: 1.5rem; }
+  .dash-stat-hint {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    margin-top: 10px;
+  }
+  .dash-stat-hint.success { color: var(--accent); }
+  .dash-stat-hint.warning { color: #d4810c; }
+  .dash-stat-hint.danger  { color: #c41c3b; }
+  .dash-stat-icon {
+    width: 46px; height: 46px;
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .dash-stat-icon.blue   { background: #eef2fc; color: #5b8dd9; }
+  .dash-stat-icon.amber  { background: #fef5ea; color: #d4810c; }
+  .dash-stat-icon.green  { background: var(--accent-light); color: var(--accent); }
+  .dash-stat-icon.rose   { background: #fde8f0; color: #c4446a; }
+
+  /* ── Layout principal ─────────────────────────────────────────────── */
+  .dash-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  @media (min-width: 1100px) {
+    .dash-grid { grid-template-columns: 2fr 1fr; }
+  }
+
+  /* ── Cards de contenido ────────────────────────────────────────────── */
+  .dash-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .dash-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .dash-card-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.005em;
+  }
+  .dash-card-link {
+    font-size: 0.78rem;
+    color: var(--accent);
+    font-weight: 500;
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  .dash-card-link:hover { color: var(--accent-hover); }
+
+  /* ── Tabla de citas ────────────────────────────────────────────────── */
+  .citas-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .citas-table thead th {
+    background: #fafaf6;
+    padding: 12px 20px;
+    text-align: left;
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+  }
+  .citas-table tbody tr {
+    transition: background 0.12s;
+    cursor: pointer;
+  }
+  .citas-table tbody tr:hover { background: #fafaf6; }
+  .citas-table tbody td {
+    padding: 14px 20px;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    font-size: 0.85rem;
+    vertical-align: middle;
+  }
+  .citas-table tbody tr:last-child td { border-bottom: none; }
+  .cita-hora {
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    font-size: 0.86rem;
+    color: var(--text-primary);
+  }
+  .cita-hora-fin {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-top: 2px;
+  }
+  .paciente-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .paciente-avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .paciente-nombre {
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 0.86rem;
+  }
+  .paciente-rut {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-family: 'Courier New', monospace;
+    margin-top: 1px;
+  }
+  .cita-prof, .cita-servicio { color: var(--text-secondary); font-size: 0.82rem; }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: capitalize;
+  }
+  .pill-confirmado { background: #def3e6; color: #1c724d; }
+  .pill-asistio    { background: #c7e5d3; color: #1b5e48; }
+  .pill-pendiente, .pill-reservado { background: #eff3f8; color: #4a5e75; }
+  .pill-en_espera  { background: #ffecc8; color: #c26f00; }
+  .pill-cancelada  { background: #f0f0f0; color: #888; }
+  .pill-reprogramada { background: #e8dff6; color: #6b54b0; }
+  .pill-no_asistio { background: #ebebeb; color: #666; }
+  .pill-pagado { background: #def3e6; color: #1c724d; }
+  .pill-abonado { background: #ffecc8; color: #c26f00; }
+  .pill-sin_pago, .pill-pendiente { background: #fce5e5; color: #a82828; }
+
+  /* ── Estado vacío ─────────────────────────────────────────────────── */
+  .dash-empty {
+    padding: 48px 24px;
+    text-align: center;
+  }
+  .dash-empty svg {
+    color: var(--text-muted);
+    opacity: 0.4;
+    margin-bottom: 12px;
+  }
+  .dash-empty-text {
+    font-size: 0.88rem;
+    color: var(--text-muted);
+  }
+
+  /* ── Lista compacta (seguimientos) ─────────────────────────────────── */
+  .compact-list-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    transition: background 0.12s;
+  }
+  .compact-list-item:hover { background: #fafaf6; }
+  .compact-list-item:last-child { border-bottom: none; }
+  .compact-avatar {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #c4446a 0%, #a02858 100%);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.68rem;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .compact-info { flex: 1; min-width: 0; }
+  .compact-name {
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .compact-sub {
+    font-size: 0.71rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .compact-fecha {
+    font-size: 0.74rem;
+    font-family: 'Courier New', monospace;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .compact-fecha.vencida {
+    color: #c41c3b;
+    font-weight: 700;
+  }
+
+  /* ── Quick actions ─────────────────────────────────────────────────── */
+  .quick-action {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 0.84rem;
+    font-weight: 500;
+    transition: all 0.15s;
+    margin-bottom: 8px;
+  }
+  .quick-action:last-child { margin-bottom: 0; }
+  .quick-action:hover {
+    background: var(--accent-light);
+    color: var(--accent-hover);
+    border-color: rgba(78,161,127,0.3);
+    transform: translateX(2px);
+  }
+  .quick-action svg {
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    transition: color 0.15s;
+  }
+  .quick-action:hover svg { color: var(--accent); }
+</style>
+{% endblock %}
+
 {% block content %}
 
-  <!-- Stats Grid -->
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+  <!-- Stats grid moderno -->
+  <div class="dash-stats-grid">
 
-    <!-- Stat: Citas hoy -->
-    <div class="card bg-gradient-to-br from-blue-50 to-blue-100 border-0 shadow-sm hover:shadow-md transition-shadow">
-      <div class="card-body p-6">
-        <div class="flex items-start justify-between">
-          <div>
-            <p class="text-sm font-medium text-blue-600">Citas hoy</p>
-            <p class="text-3xl font-bold text-blue-900 mt-2">{{ citas_hoy }}</p>
-            <p class="text-xs text-blue-600 mt-1">{{ citas_confirmadas }} confirmadas</p>
-          </div>
-          <div class="bg-blue-200 rounded-lg p-3">
-            <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-            </svg>
-          </div>
+    <!-- Citas hoy -->
+    <div class="dash-stat">
+      <div class="dash-stat-row">
+        <div>
+          <div class="dash-stat-label">Citas hoy</div>
+          <div class="dash-stat-number">{{ citas_hoy|default:0 }}</div>
+        </div>
+        <div class="dash-stat-icon blue">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="4" width="18" height="18" rx="2"/>
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
         </div>
       </div>
+      <div class="dash-stat-hint">{{ citas_confirmadas|default:0 }} confirmada{{ citas_confirmadas|pluralize }}</div>
     </div>
 
-    <!-- Stat: En espera -->
-    <div class="card bg-gradient-to-br from-amber-50 to-amber-100 border-0 shadow-sm hover:shadow-md transition-shadow">
-      <div class="card-body p-6">
-        <div class="flex items-start justify-between">
-          <div>
-            <p class="text-sm font-medium text-amber-600">En espera</p>
-            <p class="text-3xl font-bold text-amber-900 mt-2">{{ en_espera }}</p>
-            <p class="text-xs text-amber-600 mt-1">En sala de espera</p>
-          </div>
-          <div class="bg-amber-200 rounded-lg p-3">
-            <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-          </div>
+    <!-- En espera -->
+    <div class="dash-stat">
+      <div class="dash-stat-row">
+        <div>
+          <div class="dash-stat-label">En espera</div>
+          <div class="dash-stat-number">{{ en_espera|default:0 }}</div>
+        </div>
+        <div class="dash-stat-icon amber">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
         </div>
       </div>
+      <div class="dash-stat-hint">En sala de espera</div>
     </div>
 
-    <!-- Stat: Recaudado -->
-    <div class="card bg-gradient-to-br from-green-50 to-green-100 border-0 shadow-sm hover:shadow-md transition-shadow">
-      <div class="card-body p-6">
-        <div class="flex items-start justify-between">
-          <div>
-            <p class="text-sm font-medium text-green-600">Recaudado</p>
-            <p class="text-3xl font-bold text-green-900 mt-2">{{ recaudado_hoy|pesos }}</p>
-            <p class="text-xs text-green-600 mt-1">{{ pagos_hoy }} pago(s) hoy</p>
-          </div>
-          <div class="bg-green-200 rounded-lg p-3">
-            <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-          </div>
+    <!-- Recaudado hoy -->
+    <div class="dash-stat">
+      <div class="dash-stat-row">
+        <div>
+          <div class="dash-stat-label">Recaudado hoy</div>
+          <div class="dash-stat-number money">{{ recaudado_hoy|default:0|pesos }}</div>
+        </div>
+        <div class="dash-stat-icon green">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="1" x2="12" y2="23"/>
+            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+          </svg>
         </div>
       </div>
+      <div class="dash-stat-hint success">{{ pagos_hoy|default:0 }} pago{{ pagos_hoy|pluralize }} hoy</div>
     </div>
 
-    <!-- Stat: Seguimientos -->
-    <div class="card bg-gradient-to-br from-rose-50 to-rose-100 border-0 shadow-sm hover:shadow-md transition-shadow">
-      <div class="card-body p-6">
-        <div class="flex items-start justify-between">
-          <div>
-            <p class="text-sm font-medium text-rose-600">Seguimientos</p>
-            <p class="text-3xl font-bold text-rose-900 mt-2">{{ seguimientos_pendientes }}</p>
-            <p class="text-xs {% if seguimientos_vencidos %}text-rose-600{% else %}text-green-600{% endif %} mt-1">
-              {% if seguimientos_vencidos %}
-                {{ seguimientos_vencidos }} vencido(s)
-              {% else %}
-                Al día ✓
-              {% endif %}
-            </p>
-          </div>
-          <div class="bg-rose-200 rounded-lg p-3">
-            <svg class="w-6 h-6 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-            </svg>
-          </div>
+    <!-- Seguimientos -->
+    <div class="dash-stat">
+      <div class="dash-stat-row">
+        <div>
+          <div class="dash-stat-label">Seguimientos</div>
+          <div class="dash-stat-number">{{ seguimientos_pendientes|default:0 }}</div>
+        </div>
+        <div class="dash-stat-icon rose">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
         </div>
       </div>
+      {% if seguimientos_vencidos %}
+        <div class="dash-stat-hint danger">{{ seguimientos_vencidos }} vencido{{ seguimientos_vencidos|pluralize }}</div>
+      {% else %}
+        <div class="dash-stat-hint success">Al día ✓</div>
+      {% endif %}
     </div>
 
   </div>
 
   <!-- Grid principal -->
-  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div class="dash-grid">
 
     <!-- Citas del día -->
-    <div class="lg:col-span-2">
-      <div class="card border-0 shadow-sm">
-        <div class="card-body p-0">
-          <div class="flex items-center justify-between p-6 border-b border-base-200">
-            <h2 class="card-title text-lg font-bold">Citas de hoy</h2>
-            <a href="{% url 'agenda' %}" class="btn btn-sm btn-ghost">Ver agenda →</a>
-          </div>
-
-          {% if citas_del_dia %}
-          <div class="overflow-x-auto">
-            <table class="table table-zebra w-full">
-              <thead class="bg-base-200">
-                <tr>
-                  <th class="text-sm">Hora</th>
-                  <th class="text-sm">Paciente</th>
-                  <th class="text-sm">Profesional</th>
-                  <th class="text-sm">Servicio</th>
-                  <th class="text-sm">Estado</th>
-                  <th class="text-sm">Pago</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for cita in citas_del_dia %}
-                <tr class="hover:bg-base-100 cursor-pointer" onclick="abrirDetalleCita({{ cita.id }})">
-                  <td class="font-mono text-sm font-medium">
-                    {{ cita.hora_inicio|time:"H:i" }}{% if cita.hora_fin %}<br><span class="text-xs text-gray-500">{{ cita.hora_fin|time:"H:i" }}</span>{% endif %}
-                  </td>
-                  <td>
-                    <div class="flex items-center gap-2">
-                      <div class="avatar placeholder">
-                        <div class="bg-primary text-primary-content rounded-full w-8 h-8 flex items-center justify-center text-xs font-bold">
-                          {{ cita.paciente.nombres|slice:":1" }}{{ cita.paciente.apellidos|slice:":1" }}
-                        </div>
-                      </div>
-                      <div>
-                        <p class="font-medium text-sm">{{ cita.paciente.nombres }} {{ cita.paciente.apellidos }}</p>
-                        <p class="text-xs text-gray-500">{{ cita.paciente.rut }}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td class="text-sm text-gray-600">{{ cita.profesional }}</td>
-                  <td class="text-sm text-gray-600">{{ cita.servicio.nombre }}</td>
-                  <td>
-                    <span class="badge {% if cita.estado == 'confirmado' %}badge-success{% elif cita.estado == 'asistio' %}badge-info{% elif cita.estado == 'en_espera' %}badge-warning{% elif cita.estado == 'cancelada' %}badge-error{% else %}badge-ghost{% endif %}">
-                      {{ cita.get_estado_display }}
-                    </span>
-                  </td>
-                  <td>
-                    <span class="badge {% if cita.estado_pago == 'pagado' %}badge-success{% elif cita.estado_pago == 'abonado' %}badge-warning{% else %}badge-ghost{% endif %}">
-                      {{ cita.get_estado_pago_display }}
-                    </span>
-                  </td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-          {% else %}
-          <div class="flex flex-col items-center justify-center p-12 text-center">
-            <svg class="w-12 h-12 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-            </svg>
-            <p class="text-gray-500 font-medium">No hay citas registradas para hoy</p>
-          </div>
-          {% endif %}
-        </div>
+    <div class="dash-card">
+      <div class="dash-card-header">
+        <span class="dash-card-title">Citas de hoy</span>
+        <a href="{% url 'agenda' %}" class="dash-card-link">Ver agenda →</a>
       </div>
+
+      {% if citas_del_dia %}
+        <table class="citas-table">
+          <thead>
+            <tr>
+              <th>Hora</th>
+              <th>Paciente</th>
+              <th>Profesional</th>
+              <th>Servicio</th>
+              <th>Estado</th>
+              <th>Pago</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for cita in citas_del_dia %}
+            <tr onclick="window.location.href='{% url 'agenda' %}?fecha={{ cita.fecha|date:'Y-m-d' }}'">
+              <td>
+                <div class="cita-hora">{{ cita.hora_inicio|time:"H:i" }}</div>
+                {% if cita.hora_fin %}<div class="cita-hora-fin">{{ cita.hora_fin|time:"H:i" }}</div>{% endif %}
+              </td>
+              <td>
+                <div class="paciente-cell">
+                  <div class="paciente-avatar">{{ cita.paciente.nombres|slice:":1" }}{{ cita.paciente.apellidos|slice:":1" }}</div>
+                  <div>
+                    <div class="paciente-nombre">{{ cita.paciente.nombres }} {{ cita.paciente.apellidos }}</div>
+                    <div class="paciente-rut">{{ cita.paciente.rut }}</div>
+                  </div>
+                </div>
+              </td>
+              <td class="cita-prof">{{ cita.profesional }}</td>
+              <td class="cita-servicio">{{ cita.servicio.nombre }}</td>
+              <td>
+                <span class="pill pill-{{ cita.estado }}">{{ cita.get_estado_display }}</span>
+              </td>
+              <td>
+                <span class="pill pill-{{ cita.estado_pago }}">{{ cita.get_estado_pago_display }}</span>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="dash-empty">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin: 0 auto;">
+            <rect x="3" y="4" width="18" height="18" rx="2"/>
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+          <div class="dash-empty-text">No hay citas registradas para hoy</div>
+        </div>
+      {% endif %}
     </div>
 
     <!-- Panel lateral -->
-    <div class="space-y-6">
+    <div>
 
       <!-- Seguimientos próximos -->
-      <div class="card border-0 shadow-sm">
-        <div class="card-body p-0">
-          <div class="flex items-center justify-between p-6 border-b border-base-200">
-            <h3 class="card-title text-base font-bold">Próximos</h3>
-            <a href="{% url 'seguimientos' %}" class="text-xs text-primary font-medium hover:underline">Ver todos →</a>
-          </div>
-
-          {% if seguimientos_proximos %}
-          <div class="divide-y divide-base-200">
-            {% for seg in seguimientos_proximos %}
-            <div class="p-4 hover:bg-base-100 transition-colors">
-              <div class="flex items-center gap-3">
-                <div class="avatar placeholder">
-                  <div class="bg-secondary text-secondary-content rounded-full w-7 h-7 flex items-center justify-center text-xs font-bold">
-                    {{ seg.paciente.nombres|slice:":1" }}{{ seg.paciente.apellidos|slice:":1" }}
-                  </div>
-                </div>
-                <div class="flex-1 min-w-0">
-                  <p class="text-sm font-medium truncate">{{ seg.paciente.nombres }} {{ seg.paciente.apellidos }}</p>
-                  <p class="text-xs text-gray-500 truncate">{{ seg.servicio.nombre }}</p>
-                </div>
-                <span class="text-xs font-mono whitespace-nowrap {% if seg.fecha_objetivo < hoy %}text-error font-bold{% else %}text-gray-500{% endif %}">
-                  {{ seg.fecha_objetivo|date:"d/m" }}
-                </span>
+      <div class="dash-card" style="margin-bottom: 20px;">
+        <div class="dash-card-header">
+          <span class="dash-card-title">Próximos seguimientos</span>
+          <a href="{% url 'seguimientos' %}" class="dash-card-link">Ver todos →</a>
+        </div>
+        {% if seguimientos_proximos %}
+          {% for seg in seguimientos_proximos %}
+            <div class="compact-list-item">
+              <div class="compact-avatar">{{ seg.paciente.nombres|slice:":1" }}{{ seg.paciente.apellidos|slice:":1" }}</div>
+              <div class="compact-info">
+                <div class="compact-name">{{ seg.paciente.nombres }} {{ seg.paciente.apellidos }}</div>
+                <div class="compact-sub">{{ seg.servicio.nombre }}</div>
+              </div>
+              <div class="compact-fecha {% if seg.fecha_objetivo < hoy %}vencida{% endif %}">
+                {{ seg.fecha_objetivo|date:"d/m" }}
               </div>
             </div>
-            {% endfor %}
+          {% endfor %}
+        {% else %}
+          <div class="dash-empty">
+            <div class="dash-empty-text">Sin seguimientos próximos</div>
           </div>
-          {% else %}
-          <div class="p-8 text-center">
-            <p class="text-sm text-gray-500">Sin seguimientos próximos</p>
-          </div>
-          {% endif %}
-        </div>
+        {% endif %}
       </div>
 
       <!-- Acciones rápidas -->
-      <div class="card border-0 shadow-sm">
-        <div class="card-body p-6">
-          <h3 class="card-title text-base font-bold mb-4">Acciones rápidas</h3>
-          <div class="space-y-2">
-            <a href="{% url 'agenda' %}" class="btn btn-block btn-outline justify-start">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-              </svg>
-              Ir a la agenda
-            </a>
-            <a href="{% url 'seguimientos' %}" class="btn btn-block btn-outline justify-start">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-              </svg>
-              Ver seguimientos
-            </a>
-            <a href="{% url 'profesionales' %}" class="btn btn-block btn-outline justify-start">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292m0 0H8.646a4 4 0 010-5.292m3.354-5.292a4 4 0 100 5.292m0 0H7a3 3 0 100 6m3-6h4"/>
-              </svg>
-              Profesionales
-            </a>
-          </div>
+      <div class="dash-card">
+        <div class="dash-card-header">
+          <span class="dash-card-title">Acciones rápidas</span>
+        </div>
+        <div style="padding: 16px 20px 20px;">
+          <a href="{% url 'agenda' %}" class="quick-action">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            Ir a la agenda
+          </a>
+          <a href="{% url 'seguimientos' %}" class="quick-action">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+            Ver seguimientos
+          </a>
+          <a href="{% url 'profesionales' %}" class="quick-action">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            Profesionales
+          </a>
+          <a href="{% url 'insumos' %}" class="quick-action">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            </svg>
+            Insumos
+          </a>
         </div>
       </div>
 

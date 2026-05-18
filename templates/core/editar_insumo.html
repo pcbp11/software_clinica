@@ -1,0 +1,387 @@
+{% extends "core/base.html" %}
+
+{% block title %}Editar Insumo{% endblock %}
+{% block page_title %}Editar Insumo{% endblock %}
+{% block page_subtitle %}{{ insumo.codigo_sku }} — {{ insumo.nombre }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .form-container {
+    max-width: 700px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+
+  .sku-info {
+    background: #fafaf8;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    margin-bottom: 20px;
+    font-size: 0.82rem;
+  }
+  .sku-info-label {
+    color: var(--text-muted);
+    font-size: 0.73rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+  }
+  .sku-info-value {
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    color: var(--accent);
+    font-size: 1.1rem;
+  }
+
+  .form-group {
+    margin-bottom: 20px;
+  }
+  .form-group:last-child {
+    margin-bottom: 0;
+  }
+
+  .form-label {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+  .form-label .required {
+    color: #c41c3b;
+  }
+
+  .form-input, .form-select, .form-textarea {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    background: var(--bg-card);
+    box-sizing: border-box;
+    transition: border-color 0.15s;
+  }
+  .form-input:focus, .form-select:focus, .form-textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(78, 161, 127, 0.1);
+  }
+
+  .form-hint {
+    font-size: 0.73rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .form-row.tres {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .form-section-title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-top: 24px;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  .btn-primary {
+    padding: 10px 24px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-primary:hover {
+    background: var(--accent-hover);
+  }
+
+  .btn-secondary {
+    padding: 10px 24px;
+    background: #f0f0f0;
+    color: var(--text-primary);
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .btn-secondary:hover {
+    background: #e0e0e0;
+  }
+
+  .btn-danger {
+    padding: 10px 24px;
+    background: #fde4e6;
+    color: #c41c3b;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-left: auto;
+  }
+  .btn-danger:hover {
+    background: #fcc7ce;
+  }
+
+  .messages {
+    margin-bottom: 20px;
+  }
+  .message {
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+  }
+  .message.error {
+    background: #fde4e6;
+    color: #c41c3b;
+    border: 1px solid #f5b3ba;
+  }
+  .message.success {
+    background: #e6f4ee;
+    color: var(--accent);
+    border: 1px solid #b8e6d5;
+  }
+
+  .estado-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.69rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+  }
+  .estado-vigente {
+    background: #e6f4ee;
+    color: var(--accent);
+  }
+  .estado-vencido {
+    background: #fde4e6;
+    color: #c41c3b;
+  }
+  .estado-vendido {
+    background: #e6e8f4;
+    color: #4b5a9e;
+  }
+  .estado-cancelado {
+    background: #f0f0f0;
+    color: var(--text-muted);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if messages %}
+  <div class="messages">
+    {% for message in messages %}
+      <div class="message {% if message.tags %}{{ message.tags }}{% endif %}">
+        {{ message }}
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<div class="form-container">
+  <!-- Información del SKU -->
+  <div class="sku-info">
+    <div class="sku-info-label">Código SKU</div>
+    <div class="sku-info-value">{{ insumo.codigo_sku }}</div>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+
+    <!-- Sección 1: Producto y Proveedor -->
+    <div class="form-section-title">Producto y Proveedor</div>
+
+    <div class="form-group">
+      <label class="form-label">
+        Producto del Proveedor <span class="required">*</span>
+      </label>
+      <select name="producto_proveedor" class="form-select" required>
+        <option value="">-- Selecciona un producto --</option>
+        {% for prod in productos_proveedores %}
+          <option value="{{ prod.id }}" {% if prod.id == insumo.producto_proveedor.id %}selected{% endif %}>
+            {{ prod.nombre }} ({{ prod.proveedor.nombre }})
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">
+        Unidad de Negocio <span class="required">*</span>
+      </label>
+      <select name="unidad_negocio" class="form-select" required>
+        <option value="">-- Selecciona una unidad --</option>
+        {% for unidad in unidades_negocio %}
+          <option value="{{ unidad.id }}" {% if unidad.id == insumo.unidad_negocio.id %}selected{% endif %}>
+            {{ unidad.nombre }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Sección 2: Fechas -->
+    <div class="form-section-title">Fechas y Duración</div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">
+          Fecha de Compra <span class="required">*</span>
+        </label>
+        <input type="date" name="fecha_compra" class="form-input" value="{{ insumo.fecha_compra|date:'Y-m-d' }}" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Fecha de Vencimiento</label>
+        <input type="date" name="fecha_vencimiento" class="form-input" value="{% if insumo.fecha_vencimiento %}{{ insumo.fecha_vencimiento|date:'Y-m-d' }}{% endif %}">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Tiempo Máximo Proyectado</label>
+        <input type="text" name="tiempo_maximo_proyectado" class="form-input" value="{{ insumo.tiempo_maximo_proyectado|default:'' }}">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Unidad de Tiempo</label>
+        <select name="unidad_tiempo" class="form-select">
+          <option value="dias" {% if insumo.unidad_tiempo == "dias" %}selected{% endif %}>Días</option>
+          <option value="semanas" {% if insumo.unidad_tiempo == "semanas" %}selected{% endif %}>Semanas</option>
+          <option value="meses" {% if insumo.unidad_tiempo == "meses" %}selected{% endif %}>Meses</option>
+          <option value="anos" {% if insumo.unidad_tiempo == "anos" %}selected{% endif %}>Años</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Sección 3: Costos -->
+    <div class="form-section-title">Costos de Compra</div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Costo Neto</label>
+        <input type="number" name="costo_neto" class="form-input" value="{{ insumo.costo_neto|default:0 }}">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Costo con IVA</label>
+        <input type="number" name="costo_con_iva" class="form-input" value="{{ insumo.costo_con_iva|default:0 }}">
+      </div>
+    </div>
+
+    <!-- Sección 4: Precios de Venta -->
+    <div class="form-section-title">Precios de Venta</div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Precio Venta Neto</label>
+        <input type="number" name="precio_venta_neto" class="form-input" value="{{ insumo.precio_venta_neto|default:0 }}">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Precio Venta con IVA</label>
+        <input type="number" name="precio_venta_con_iva" class="form-input" value="{{ insumo.precio_venta_con_iva|default:0 }}">
+      </div>
+    </div>
+
+    <!-- Sección 5: Inventario -->
+    <div class="form-section-title">Inventario</div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Cantidad Disponible</label>
+        <input type="number" name="cantidad_disponible" class="form-input" value="{{ insumo.cantidad_disponible|default:0 }}">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Unidad de Medida</label>
+        <input type="text" name="unidad" class="form-input" value="{{ insumo.unidad|default:'' }}">
+      </div>
+    </div>
+
+    <!-- Sección 6: Estado -->
+    <div class="form-section-title">Estado del Insumo</div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Estado del producto</label>
+        <select name="estado" class="form-select">
+          <option value="vigente" {% if insumo.estado == "vigente" %}selected{% endif %}>Vigente</option>
+          <option value="terminado" {% if insumo.estado == "terminado" %}selected{% endif %}>Terminado</option>
+        </select>
+        <div class="form-hint">
+          Actual: <span class="estado-badge estado-{{ insumo.estado }}">{{ insumo.get_estado_display }}</span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Estado transferencia</label>
+        <select name="estado_transferencia" class="form-select" id="estado-transferencia">
+          <option value="pendiente" {% if insumo.estado_transferencia == "pendiente" %}selected{% endif %}>Pendiente</option>
+          <option value="realizada" {% if insumo.estado_transferencia == "realizada" %}selected{% endif %}>Realizada</option>
+        </select>
+        <div class="form-hint">
+          Para tracking de la inversión en cuentas distintas.
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Fecha de la transferencia</label>
+      <input type="date" name="fecha_transferencia" class="form-input" id="fecha-transferencia"
+             value="{{ insumo.fecha_transferencia|date:'Y-m-d'|default:'' }}">
+      <div class="form-hint">Opcional. Si marcas la transferencia como realizada y no llenas la fecha, se usa hoy.</div>
+    </div>
+
+    <!-- Sección 7: Notas -->
+    <div class="form-group">
+      <label class="form-label">Descripción / Notas</label>
+      <textarea name="descripcion" class="form-textarea" rows="3">{{ insumo.descripcion|default:'' }}</textarea>
+    </div>
+
+    <!-- Botones de acción -->
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">Guardar Cambios</button>
+      <a href="{% url 'insumos' %}" class="btn-secondary">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
