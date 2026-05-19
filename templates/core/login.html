@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -33,25 +34,17 @@
       text-align: center;
       margin-bottom: 32px;
     }
-    .login-brand .brand-icon {
-      width: 52px; height: 52px;
-      background: #4ea17f;
-      border-radius: 14px;
-      display: inline-flex; align-items: center; justify-content: center;
-      margin-bottom: 14px;
-      box-shadow: 0 4px 16px rgba(78,161,127,0.28);
+    .login-brand .brand-logo {
+      width: 200px;
+      height: auto;
+      margin-bottom: 8px;
+      filter: drop-shadow(0 6px 24px rgba(30,40,69,0.08));
     }
-    .login-brand h1 {
-      font-family: 'Fraunces', serif;
-      font-size: 1.6rem;
-      font-weight: 300;
-      color: #1c2433;
-      letter-spacing: 0.01em;
-    }
-    .login-brand p {
-      font-size: 0.82rem;
+    .login-brand .brand-tagline {
+      font-size: 0.78rem;
       color: #9daab8;
       margin-top: 4px;
+      letter-spacing: 0.04em;
     }
 
     .login-card {
@@ -145,13 +138,8 @@
   <div class="login-wrap">
 
     <div class="login-brand">
-      <div class="brand-icon">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8">
-          <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-        </svg>
-      </div>
-      <h1>Clínica</h1>
-      <p>Gestión integral de pacientes y agenda</p>
+      <img src="{% static 'img/Isologotipo-mia-principal.png' %}" alt="Clínica Mía Salud" class="brand-logo">
+      <p class="brand-tagline">Gestión integral · La Serena</p>
     </div>
 
     <div class="login-card">

@@ -16,68 +16,7 @@
 
 {% block extra_head %}
 <style>
-  /* ── Stat Cards Modernos (estilo Pomba) ─────────────────────────────── */
-  .dash-stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 18px;
-    margin-bottom: 28px;
-  }
-  .dash-stat {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 22px 24px;
-    transition: all 0.2s ease;
-    position: relative;
-    overflow: hidden;
-  }
-  .dash-stat:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 28px rgba(30,40,69,0.08);
-    border-color: rgba(78,161,127,0.2);
-  }
-  .dash-stat-label {
-    font-size: 0.72rem;
-    font-weight: 500;
-    color: var(--text-muted);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    margin-bottom: 8px;
-  }
-  .dash-stat-row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-  }
-  .dash-stat-number {
-    font-family: var(--font-display);
-    font-size: 2.1rem;
-    font-weight: 300;
-    color: var(--text-primary);
-    line-height: 1;
-    letter-spacing: -0.01em;
-  }
-  .dash-stat-number.money { font-size: 1.5rem; }
-  .dash-stat-hint {
-    font-size: 0.78rem;
-    color: var(--text-secondary);
-    margin-top: 10px;
-  }
-  .dash-stat-hint.success { color: var(--accent); }
-  .dash-stat-hint.warning { color: #d4810c; }
-  .dash-stat-hint.danger  { color: #c41c3b; }
-  .dash-stat-icon {
-    width: 46px; height: 46px;
-    border-radius: 14px;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
-  }
-  .dash-stat-icon.blue   { background: #eef2fc; color: #5b8dd9; }
-  .dash-stat-icon.amber  { background: #fef5ea; color: #d4810c; }
-  .dash-stat-icon.green  { background: var(--accent-light); color: var(--accent); }
-  .dash-stat-icon.rose   { background: #fde8f0; color: #c4446a; }
+  /* Stat cards heredan de base.html (componente global) */
 
   /* ── Layout principal ─────────────────────────────────────────────── */
   .dash-grid {
@@ -305,78 +244,37 @@
 {% block content %}
 
   <!-- Stats grid moderno -->
-  <div class="dash-stats-grid">
+  <div class="stats-grid">
 
     <!-- Citas hoy -->
-    <div class="dash-stat">
-      <div class="dash-stat-row">
-        <div>
-          <div class="dash-stat-label">Citas hoy</div>
-          <div class="dash-stat-number">{{ citas_hoy|default:0 }}</div>
-        </div>
-        <div class="dash-stat-icon blue">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="4" width="18" height="18" rx="2"/>
-            <line x1="16" y1="2" x2="16" y2="6"/>
-            <line x1="8" y1="2" x2="8" y2="6"/>
-            <line x1="3" y1="10" x2="21" y2="10"/>
-          </svg>
-        </div>
-      </div>
-      <div class="dash-stat-hint">{{ citas_confirmadas|default:0 }} confirmada{{ citas_confirmadas|pluralize }}</div>
+    <div class="stat-card blue">
+      <div class="stat-label">Citas hoy</div>
+      <div class="stat-value">{{ citas_hoy|default:0 }}</div>
+      <div class="stat-hint">{{ citas_confirmadas|default:0 }} confirmada{{ citas_confirmadas|pluralize }}</div>
     </div>
 
     <!-- En espera -->
-    <div class="dash-stat">
-      <div class="dash-stat-row">
-        <div>
-          <div class="dash-stat-label">En espera</div>
-          <div class="dash-stat-number">{{ en_espera|default:0 }}</div>
-        </div>
-        <div class="dash-stat-icon amber">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <polyline points="12 6 12 12 16 14"/>
-          </svg>
-        </div>
-      </div>
-      <div class="dash-stat-hint">En sala de espera</div>
+    <div class="stat-card amber">
+      <div class="stat-label">En espera</div>
+      <div class="stat-value">{{ en_espera|default:0 }}</div>
+      <div class="stat-hint">En sala de espera</div>
     </div>
 
     <!-- Recaudado hoy -->
-    <div class="dash-stat">
-      <div class="dash-stat-row">
-        <div>
-          <div class="dash-stat-label">Recaudado hoy</div>
-          <div class="dash-stat-number money">{{ recaudado_hoy|default:0|pesos }}</div>
-        </div>
-        <div class="dash-stat-icon green">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="1" x2="12" y2="23"/>
-            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-          </svg>
-        </div>
-      </div>
-      <div class="dash-stat-hint success">{{ pagos_hoy|default:0 }} pago{{ pagos_hoy|pluralize }} hoy</div>
+    <div class="stat-card green">
+      <div class="stat-label">Recaudado hoy</div>
+      <div class="stat-value money">{{ recaudado_hoy|default:0|pesos }}</div>
+      <div class="stat-hint success">{{ pagos_hoy|default:0 }} pago{{ pagos_hoy|pluralize }} hoy</div>
     </div>
 
     <!-- Seguimientos -->
-    <div class="dash-stat">
-      <div class="dash-stat-row">
-        <div>
-          <div class="dash-stat-label">Seguimientos</div>
-          <div class="dash-stat-number">{{ seguimientos_pendientes|default:0 }}</div>
-        </div>
-        <div class="dash-stat-icon rose">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-          </svg>
-        </div>
-      </div>
+    <div class="stat-card rose">
+      <div class="stat-label">Seguimientos</div>
+      <div class="stat-value">{{ seguimientos_pendientes|default:0 }}</div>
       {% if seguimientos_vencidos %}
-        <div class="dash-stat-hint danger">{{ seguimientos_vencidos }} vencido{{ seguimientos_vencidos|pluralize }}</div>
+        <div class="stat-hint danger">{{ seguimientos_vencidos }} vencido{{ seguimientos_vencidos|pluralize }}</div>
       {% else %}
-        <div class="dash-stat-hint success">Al día ✓</div>
+        <div class="stat-hint success">Al día ✓</div>
       {% endif %}
     </div>
 

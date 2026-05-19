@@ -126,22 +126,7 @@
   .btn-ghost:hover { color: var(--accent); }
   .btn-ghost.danger:hover { color: #c41c3b; }
 
-  .stats-mini {
-    display: grid; grid-template-columns: 1fr 1fr 1fr;
-    gap: 12px; margin-bottom: 20px;
-  }
-  .stat-mini {
-    background: var(--bg-card); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); padding: 14px 16px;
-  }
-  .stat-mini-label {
-    font-size: 0.69rem; font-weight: 500; letter-spacing: 0.09em;
-    text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px;
-  }
-  .stat-mini-value {
-    font-family: var(--font-display); font-size: 1.6rem; font-weight: 300;
-    color: var(--text-primary); line-height: 1;
-  }
+  /* stats heredan de base.html (componente global) */
 
   .filters-bar {
     display: flex; gap: 12px; margin-bottom: 16px;
@@ -157,20 +142,21 @@
 
 {% block content %}
 
-<div class="stats-mini">
-  <div class="stat-mini">
-    <div class="stat-mini-label">Productos</div>
-    <div class="stat-mini-value">{{ total_productos }}</div>
+<div class="stats-grid">
+  <div class="stat-card blue">
+    <div class="stat-label">Productos</div>
+    <div class="stat-value">{{ total_productos }}</div>
+    <div class="stat-hint">en catálogo</div>
   </div>
-  <div class="stat-mini">
-    <div class="stat-mini-label">Proveedores Activos</div>
-    <div class="stat-mini-value">{{ proveedores|length }}</div>
+  <div class="stat-card green">
+    <div class="stat-label">Proveedores Activos</div>
+    <div class="stat-value">{{ proveedores|length }}</div>
+    <div class="stat-hint success">marcas disponibles</div>
   </div>
-  <div class="stat-mini">
-    <div class="stat-mini-label">Filtrado</div>
-    <div class="stat-mini-value" style="font-size: 0.95rem; padding-top: 4px;">
-      {% if proveedor_nombre %}{{ proveedor_nombre|truncatechars:25 }}{% else %}Todos{% endif %}
-    </div>
+  <div class="stat-card amber">
+    <div class="stat-label">Filtrado por</div>
+    <div class="stat-value small">{% if proveedor_nombre %}{{ proveedor_nombre|truncatechars:20 }}{% else %}Todos{% endif %}</div>
+    <div class="stat-hint">vista actual</div>
   </div>
 </div>
 

@@ -642,6 +642,257 @@
     animation: spin 0.6s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ═══════════════════════════════════════════════════════════════
+     MODAL DE NUEVA CITA — diseño tipo AgendaPro con secciones
+     ═══════════════════════════════════════════════════════════════ */
+  .modal-cita-card {
+    max-width: 560px !important;
+    width: 100%;
+    padding: 0 !important;
+  }
+  .mc-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .mc-head-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .mc-title {
+    font-family: var(--font-body);
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.005em;
+  }
+  .mc-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 11px;
+    background: var(--status-reservado-bg);
+    color: var(--status-reservado-text);
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .mc-status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--status-reservado-text);
+    flex-shrink: 0;
+  }
+
+  .mc-body {
+    padding: 18px 24px 20px;
+    overflow-y: auto;
+    max-height: calc(90vh - 130px);
+  }
+  .mc-section {
+    margin-bottom: 20px;
+    padding: 16px;
+    background: #fafaf6;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .mc-section-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+  }
+  .mc-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .mc-field { margin-bottom: 14px; }
+  .mc-field:last-child { margin-bottom: 0; }
+  .mc-label {
+    display: block;
+    font-size: 0.76rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+  .mc-required { color: #c4446a; }
+  .mc-input, .mc-textarea {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: var(--font-body);
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    background: #fff;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    outline: none;
+  }
+  .mc-input:focus, .mc-textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(78,161,127,0.12);
+  }
+  .mc-textarea { min-height: 70px; resize: vertical; }
+
+  .mc-readonly-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+  .mc-readonly-field svg {
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .mc-hint {
+    font-size: 0.78rem;
+    margin-top: 6px;
+    color: var(--text-secondary);
+  }
+  .mc-hint.warning { color: #9d6c00; }
+  .mc-hint a { color: var(--accent); text-decoration: none; font-weight: 500; }
+  .mc-hint a:hover { color: var(--accent-hover); }
+
+  .mc-collapsible {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: #fff;
+  }
+  .mc-collapsible-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    cursor: pointer;
+    font-size: 0.86rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    list-style: none;
+    user-select: none;
+  }
+  .mc-collapsible-summary::-webkit-details-marker { display: none; }
+  .mc-chev {
+    color: var(--text-muted);
+    transition: transform 0.2s ease;
+  }
+  .mc-collapsible[open] .mc-chev { transform: rotate(180deg); }
+  .mc-collapsible[open] .mc-collapsible-summary {
+    border-bottom: 1px solid var(--border);
+  }
+  .mc-collapsible .mc-field { padding: 0 16px 16px; margin-bottom: 0; }
+
+  .mc-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 24px;
+    background: #fafaf6;
+    border-top: 1px solid var(--border);
+    border-bottom-left-radius: 18px;
+    border-bottom-right-radius: 18px;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     POPOVER del slot — menú compacto tipo AgendaPro
+     ═══════════════════════════════════════════════════════════════ */
+  .popover-slot {
+    display: none;
+    position: fixed;
+    z-index: 600;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 12px 36px rgba(15,20,40,0.14), 0 2px 6px rgba(15,20,40,0.05);
+    padding: 0;
+    min-width: 190px;
+    animation: popoverIn 0.15s ease;
+    overflow: hidden;
+  }
+  .popover-slot.active { display: block; }
+  @keyframes popoverIn {
+    from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .popover-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 12px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .popover-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+  .popover-title svg { color: var(--text-secondary); }
+  .popover-close-x {
+    width: 20px; height: 20px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-muted);
+    font-size: 1.05rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0;
+    transition: background 0.12s, color 0.12s;
+  }
+  .popover-close-x:hover {
+    background: rgba(0,0,0,0.05);
+    color: var(--text-primary);
+  }
+  .popover-list { padding: 4px; }
+  .popover-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 7px 10px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-size: 0.84rem;
+    font-weight: 400;
+    color: var(--text-primary);
+    text-align: left;
+    transition: background 0.12s;
+  }
+  .popover-item:hover {
+    background: rgba(0,0,0,0.04);
+  }
+  .popover-item svg {
+    color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+  .popover-item:hover svg { color: var(--text-primary); }
+
+  /* Estado activo del slot: queda OCULTO debajo del popover que lo reemplaza */
+  .cal-slot-btn.is-active {
+    visibility: hidden;
+  }
 </style>
 {% endblock %}
 
@@ -823,7 +1074,7 @@
                     data-prof="{{ item.profesional|escapejs }}"
                     data-fecha="{{ fecha|date:'Y-m-d' }}"
                     data-hora="{{ slot.hora }}"
-                    onclick="abrirModalBtn(this)"
+                    onclick="mostrarMenuSlot(this, event)"
                     type="button">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="4" x2="12" y2="20"/><line x1="4" y1="12" x2="20" y2="12"/></svg>
               {{ slot.hora }}
@@ -863,28 +1114,48 @@
 
 
 <!-- ══════════════════════════════════════════
+     POPOVER: Menú en slot vacío (Agregar)
+══════════════════════════════════════════ -->
+<div id="popover-slot" class="popover-slot" onclick="event.stopPropagation()">
+  <div class="popover-header">
+    <span class="popover-title">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Agregar
+    </span>
+    <button class="popover-close-x" onclick="cerrarPopover()" type="button" aria-label="Cerrar">×</button>
+  </div>
+  <div class="popover-list">
+    <button class="popover-item" onclick="popoverElegirReserva()" type="button">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <rect x="3" y="4" width="18" height="18" rx="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+      Reserva
+    </button>
+    <button class="popover-item" onclick="popoverElegirBloqueo()" type="button">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+      </svg>
+      Bloquear horario
+    </button>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
      MODAL: Nueva cita
 ══════════════════════════════════════════ -->
 <div id="modal-cita" class="modal-overlay" style="display:none;" onclick="if(event.target===this)cerrarModal()">
-  <div class="modal-card">
-    <div class="modal-head">
-      <span class="modal-titulo">Nueva cita</span>
-      <button class="modal-cerrar" onclick="cerrarModal()" type="button">×</button>
-    </div>
-
-    <div class="modal-slot-info">
-      <div class="slot-info-item">
-        <span class="slot-info-label">Profesional</span>
-        <span class="slot-info-val" id="m-info-prof">—</span>
+  <div class="modal-card modal-cita-card">
+    <!-- Header -->
+    <div class="mc-head">
+      <div class="mc-head-left">
+        <h2 class="mc-title">Nueva cita</h2>
+        <span class="mc-status-badge"><span class="mc-status-dot"></span>Reservada</span>
       </div>
-      <div class="slot-info-item">
-        <span class="slot-info-label">Fecha</span>
-        <span class="slot-info-val" id="m-info-fecha">—</span>
-      </div>
-      <div class="slot-info-item">
-        <span class="slot-info-label">Hora inicio</span>
-        <span class="slot-info-val" id="m-info-hora">—</span>
-      </div>
+      <button class="modal-cerrar" onclick="cerrarModal()" type="button" aria-label="Cerrar">×</button>
     </div>
 
     <form method="post" action="{% url 'crear_cita' %}" id="form-cita">
@@ -893,61 +1164,103 @@
       <input type="hidden" name="fecha"       id="m-fecha">
       <input type="hidden" name="hora_inicio" id="m-hora">
 
-      <div class="modal-body">
-        <div class="form-group">
-          <label>Paciente</label>
-          <div class="search-select-wrap">
-            <input type="text" class="search-input-top" placeholder="Buscar por nombre o RUT..."
-                   oninput="filtrarOpciones(this, 'm-paciente')" autocomplete="off">
-            <select id="m-paciente" name="paciente" required class="search-select" size="4">
-              {% for p in pacientes %}
-              <option value="{{ p.id }}" data-search="{{ p.nombres|lower }} {{ p.apellidos|lower }} {{ p.rut }}">
-                {{ p.nombres }} {{ p.apellidos }} · {{ p.rut }}
+      <div class="mc-body">
+        <!-- Cuándo y con quién -->
+        <div class="mc-section">
+          <div class="mc-section-title">Cuándo y con quién</div>
+
+          <div class="mc-grid-2">
+            <div class="mc-field">
+              <label class="mc-label">Fecha</label>
+              <div class="mc-readonly-field">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <span id="m-info-fecha">—</span>
+              </div>
+            </div>
+            <div class="mc-field">
+              <label class="mc-label">Hora</label>
+              <div class="mc-readonly-field">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span id="m-info-hora">—</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mc-field">
+            <label class="mc-label">Profesional</label>
+            <div class="mc-readonly-field">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span id="m-info-prof">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Datos de la cita -->
+        <div class="mc-section">
+          <div class="mc-section-title">Datos de la cita</div>
+
+          <div class="mc-field">
+            <label class="mc-label" for="m-paciente">Paciente <span class="mc-required">*</span></label>
+            <div class="search-select-wrap">
+              <input type="text" class="search-input-top mc-input" placeholder="Buscar por nombre o RUT…"
+                     oninput="filtrarOpciones(this, 'm-paciente')" autocomplete="off">
+              <select id="m-paciente" name="paciente" required class="search-select" size="4">
+                {% for p in pacientes %}
+                <option value="{{ p.id }}" data-search="{{ p.nombres|lower }} {{ p.apellidos|lower }} {{ p.rut }}">
+                  {{ p.nombres }} {{ p.apellidos }} · {{ p.rut }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            {% if not pacientes %}
+            <p class="mc-hint warning">
+              No hay pacientes activos. <a href="/admin/core/paciente/add/" target="_blank">Crear uno →</a>
+            </p>
+            {% endif %}
+          </div>
+
+          <div class="mc-field">
+            <label class="mc-label" for="m-servicio">Servicio <span class="mc-required">*</span></label>
+            <select id="m-servicio" name="servicio" required class="mc-input" onchange="actualizarInfoServicio(this)">
+              <option value="">— Selecciona un servicio —</option>
+              {% for s in servicios %}
+              <option value="{{ s.id }}" data-precio="{{ s.precio }}" data-duracion="{{ s.duracion_minutos }}"
+                      {% if servicio_id == s.id|stringformat:"s" %}selected{% endif %}>
+                {{ s.nombre }}
               </option>
               {% endfor %}
             </select>
-          </div>
-          {% if not pacientes %}
-          <p style="font-size:0.78rem; color:#d4810c; margin-top:6px;">
-            No hay pacientes activos. <a href="/admin/core/paciente/add/" target="_blank" style="color:var(--accent);">Crear uno →</a>
-          </p>
-          {% endif %}
-        </div>
-
-        <div class="form-group">
-          <label>Servicio</label>
-          <select id="m-servicio" name="servicio" required onchange="actualizarInfoServicio(this)">
-            <option value="">— Selecciona un servicio —</option>
-            {% for s in servicios %}
-            <option value="{{ s.id }}" data-precio="{{ s.precio }}" data-duracion="{{ s.duracion_minutos }}"
-                    {% if servicio_id == s.id|stringformat:"s" %}selected{% endif %}>
-              {{ s.nombre }}
-            </option>
-            {% endfor %}
-          </select>
-          <div class="servicio-info" id="m-servicio-info" style="display:none;">
-            <span class="info-chip">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-              <strong id="m-precio-val"></strong>
-            </span>
-            <span class="info-chip">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              <strong id="m-duracion-val"></strong>
-            </span>
+            <div class="servicio-info" id="m-servicio-info" style="display:none;">
+              <span class="info-chip">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                <strong id="m-precio-val"></strong>
+              </span>
+              <span class="info-chip">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <strong id="m-duracion-val"></strong>
+              </span>
+            </div>
           </div>
         </div>
 
-        <div class="form-group" style="margin-bottom:0;">
-          <label>Observaciones <span style="color:var(--text-muted); font-weight:400;">(opcional)</span></label>
-          <textarea name="observaciones" placeholder="Notas adicionales..." style="min-height:60px; resize:none;"></textarea>
-        </div>
+        <!-- Info adicional colapsable -->
+        <details class="mc-collapsible">
+          <summary class="mc-collapsible-summary">
+            <span>Información adicional</span>
+            <svg class="mc-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="mc-field" style="margin-top:14px;">
+            <label class="mc-label">Observaciones</label>
+            <textarea name="observaciones" class="mc-input mc-textarea" placeholder="Notas adicionales sobre la cita…"></textarea>
+          </div>
+        </details>
       </div>
 
-      <div class="modal-footer">
+      <div class="mc-footer">
         <button type="button" onclick="cerrarModal()" class="btn btn-ghost">Cancelar</button>
         <button type="submit" class="btn btn-primary">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="20 6 9 17 4 12"/></svg>
-          Confirmar cita
+          Guardar cita
         </button>
       </div>
     </form>
@@ -1191,6 +1504,90 @@
   function abrirModalBtn(btn) {
     abrirModal(btn.dataset.profId, btn.dataset.prof, btn.dataset.fecha, btn.dataset.hora);
   }
+
+  // ── Popover de slot vacío (menú Reserva / Bloquear) ──────────────────
+  let _slotPendiente = null;  // guarda data del slot mientras se muestra el popover
+
+  function mostrarMenuSlot(btn, event) {
+    event.stopPropagation();
+    _slotPendiente = {
+      profId: btn.dataset.profId,
+      prof:   btn.dataset.prof,
+      fecha:  btn.dataset.fecha,
+      hora:   btn.dataset.hora,
+    };
+    const pop = document.getElementById('popover-slot');
+    if (!pop) return;
+
+    // Limpiar slot activo anterior (si lo había) y marcar este
+    document.querySelectorAll('.cal-slot-btn.is-active').forEach(b => b.classList.remove('is-active'));
+    btn.classList.add('is-active');
+    _slotPendiente.btnEl = btn;
+
+    // Posicionar popover SOBRE el slot (lo reemplaza visualmente):
+    // mismo left/top, mismo ancho mínimo del slot, expandido hacia abajo
+    const rect = btn.getBoundingClientRect();
+    const popH = 130;
+    const popWmin = Math.max(rect.width, 175);  // ancho del slot, mínimo 175px
+    let left = rect.left;            // mismo left del slot
+    let top  = rect.top;             // mismo top del slot (lo cubre)
+
+    // Ajustar ancho del popover para cubrir exactamente la columna del slot
+    pop.style.minWidth = popWmin + 'px';
+
+    // Si no cabe a la derecha (popover más ancho que la columna), permitir overflow
+    // (el min-width ya empuja el right edge)
+    if (left + popWmin > window.innerWidth - 12) {
+      left = window.innerWidth - popWmin - 12;
+    }
+    if (left < 12) left = 12;
+
+    // Si no cabe abajo (slot al final del día), mostrar ARRIBA del slot
+    if (top + popH > window.innerHeight - 12) {
+      top = rect.bottom - popH;     // termina donde termina el slot
+    }
+    if (top < 12) top = 12;
+    pop.style.left = left + 'px';
+    pop.style.top  = top  + 'px';
+    pop.classList.add('active');
+
+    // Cerrar al hacer click fuera
+    setTimeout(() => {
+      document.addEventListener('click', cerrarPopoverOnClickFuera, { once: true });
+    }, 10);
+  }
+
+  function cerrarPopoverOnClickFuera(e) {
+    const pop = document.getElementById('popover-slot');
+    if (pop && !pop.contains(e.target)) {
+      cerrarPopover();
+    }
+  }
+
+  function cerrarPopover() {
+    const pop = document.getElementById('popover-slot');
+    if (pop) pop.classList.remove('active');
+    // Quitar selección visual del slot
+    document.querySelectorAll('.cal-slot-btn.is-active').forEach(b => b.classList.remove('is-active'));
+  }
+
+  function popoverElegirReserva() {
+    cerrarPopover();
+    if (_slotPendiente) {
+      abrirModal(_slotPendiente.profId, _slotPendiente.prof, _slotPendiente.fecha, _slotPendiente.hora);
+    }
+  }
+
+  function popoverElegirBloqueo() {
+    cerrarPopover();
+    // Por ahora: feature en desarrollo — backend requiere modelo nuevo
+    alert('Bloqueo de horario: feature próximamente disponible.\n\nMientras tanto, puedes marcar un descanso recurrente desde "Profesionales → editar horario".');
+  }
+
+  // Cerrar popover con Escape
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') cerrarPopover();
+  });
 
   function abrirModal(profId, profNombre, fecha, hora) {
     document.getElementById('m-profesional').value = profId;
