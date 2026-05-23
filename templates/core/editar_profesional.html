@@ -631,5 +631,40 @@ function eliminarEstructuraComision(estructuraId) {
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') cerrarModalComision();
 });
+
+// ── Auto-formateo del RUT chileno ──────────────────────────────────────
+function formatearRut(rut) {
+  rut = (rut || '').replace(/[^0-9kK]/g, '').toUpperCase();
+  if (rut.length === 0) return '';
+  if (rut.length === 1) return rut;
+  const cuerpo = rut.slice(0, -1);
+  const dv = rut.slice(-1);
+  const cuerpoConPuntos = cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return cuerpoConPuntos + '-' + dv;
+}
+
+const inputRutProf = document.getElementById('id_rut');
+if (inputRutProf) {
+  // Formatear valor inicial (por si viene sin formato desde la BD)
+  inputRutProf.value = formatearRut(inputRutProf.value);
+
+  inputRutProf.addEventListener('input', function(e) {
+    const posCursor = e.target.selectionStart;
+    const largoAntes = e.target.value.length;
+    e.target.value = formatearRut(e.target.value);
+    const largoDespues = e.target.value.length;
+    const diff = largoDespues - largoAntes;
+    e.target.setSelectionRange(posCursor + diff, posCursor + diff);
+  });
+
+  inputRutProf.addEventListener('blur', function(e) {
+    const v = e.target.value.replace(/[^0-9kK]/g, '');
+    if (v.length > 0 && v.length < 8) {
+      e.target.style.borderColor = '#c41c3b';
+    } else {
+      e.target.style.borderColor = '';
+    }
+  });
+}
 </script>
 {% endblock %}

@@ -1,6 +1,9 @@
 .venv/
+venv/
+env/
 __pycache__/
 *.pyc
+*.pyo
 db.sqlite3
 .env
 
@@ -9,3 +12,22 @@ db.sqlite3
 *.broken_backup
 *.bak
 *.tmp
+*.log
+
+# Datos de usuario / uploads (fichas clinicas - datos de salud sensibles)
+# NO deben subirse a un repo publico
+media/
+
+# Claude Code (configuracion local)
+.claude/settings.local.json
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini

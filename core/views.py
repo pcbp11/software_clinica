@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 from django.http import JsonResponse
 from django.core.mail import send_mail
 from django.conf import settings
-from django.db.models import Q
+from django.db.models import Q, Sum, Count, Max
 
 from .models import (
     Empresa,
@@ -28,6 +28,10 @@ from .models import (
     ComisionCalculada,
     Proveedor,
     ProductoProveedor,
+    FichaClinicaPaciente,
+    RegistroAtencion,
+    FotoEvolucion,
+    AuditLogFicha,
 )
 from .utils import obtener_agenda_completa
 
@@ -84,7 +88,12 @@ def agenda_view(request):
     # Parsear estados filtrados
     estados_filtrados = [e.strip() for e in estados_param.split(',') if e.strip()] if estados_param else []
 
-    profesionales = Profesional.objects.filter(activo=True)
+    # Todos los profesionales activos (usado por el modal "Nueva cita" para
+    # que siempre se puedan seleccionar todos, sin importar los filtros activos
+    # de la vista de agenda).
+    todos_profesionales = Profesional.objects.filter(activo=True).order_by('nombres', 'apellidos')
+
+    profesionales = todos_profesionales
 
     # Filtrar por sucursal si se especifica
     if sucursal_id:
@@ -107,17 +116,46 @@ def agenda_view(request):
     # o más tarde que él.
     todas_las_horas = set()
 
-    for profesional in profesionales:
-        agenda = obtener_agenda_completa(profesional, fecha)
-        if agenda:
-            tiene_horarios_ese_dia = True
-            for b in agenda:
-                todas_las_horas.add(b["hora"])
-        agenda_general.append({
-            "profesional": profesional,
-            "agenda": {b["hora"]: b for b in agenda},
-            "tiene_horarios": bool(agenda),
-        })
+    # ── MODO DE VISTA ───────────────────────────────────────────────────
+    # Si hay un profesional filtrado → vista SEMANAL (1 prof × 7 días)
+    # Si no → vista DÍA (N profesionales × 1 día)  [comportamiento original]
+    vista_semana = bool(profesional_id)
+    hoy = date.today()
+    # Lunes de la semana que contiene `fecha`
+    semana_lunes = fecha - timedelta(days=fecha.weekday())
+    semana_domingo = semana_lunes + timedelta(days=6)
+
+    if vista_semana:
+        profesional_sel = profesionales.first()
+        if profesional_sel:
+            for i in range(7):
+                d = semana_lunes + timedelta(days=i)
+                agenda = obtener_agenda_completa(profesional_sel, d)
+                if agenda:
+                    tiene_horarios_ese_dia = True
+                    for b in agenda:
+                        todas_las_horas.add(b["hora"])
+                agenda_general.append({
+                    "profesional": profesional_sel,
+                    "dia": d,
+                    "es_hoy": (d == hoy),
+                    "agenda": {b["hora"]: b for b in agenda},
+                    "tiene_horarios": bool(agenda),
+                })
+    else:
+        for profesional in profesionales:
+            agenda = obtener_agenda_completa(profesional, fecha)
+            if agenda:
+                tiene_horarios_ese_dia = True
+                for b in agenda:
+                    todas_las_horas.add(b["hora"])
+            agenda_general.append({
+                "profesional": profesional,
+                "dia": fecha,
+                "es_hoy": (fecha == hoy),
+                "agenda": {b["hora"]: b for b in agenda},
+                "tiene_horarios": bool(agenda),
+            })
 
     if todas_las_horas:
         # Rango común: del mínimo al máximo, slots de 15 minutos.
@@ -154,7 +192,13 @@ def agenda_view(request):
                     'top_px': (m_off // 15) * SLOT_H,
                 })
 
-        if fecha == date.today():
+        # En modo día: mostrar línea si "fecha" es hoy.
+        # En modo semana: mostrar línea si "hoy" cae dentro de la semana
+        # visible (el template usará item.es_hoy para ubicarla en la columna
+        # correcta).
+        mostrar_now = (vista_semana and semana_lunes <= hoy <= semana_domingo) or \
+                      (not vista_semana and fecha == hoy)
+        if mostrar_now:
             now = datetime.now().time()
             now_min = now.hour * 60 + now.minute - base_minutes
             # Solo renderizar la línea si la hora actual está DENTRO del rango
@@ -214,17 +258,25 @@ def agenda_view(request):
             item['citas_render'] = []
             item['slots_render'] = []
 
+    # Navegación: en modo semana saltamos de 7 en 7 días; en modo día, 1.
+    salto_dias = 7 if vista_semana else 1
+
     context = {
         "fecha": fecha,
-        "hoy": date.today(),
-        "fecha_anterior": fecha - timedelta(days=1),
-        "fecha_siguiente": fecha + timedelta(days=1),
+        "hoy": hoy,
+        "fecha_anterior": fecha - timedelta(days=salto_dias),
+        "fecha_siguiente": fecha + timedelta(days=salto_dias),
+        "vista_semana": vista_semana,
+        "semana_lunes": semana_lunes,
+        "semana_domingo": semana_domingo,
         "horas": horas_base or [],
         "agenda_general": agenda_general,
         "servicio_id": servicio_id,
         "servicios": servicios,
         "pacientes": pacientes,
         "profesionales": profesionales,
+        "todos_profesionales": todos_profesionales,
+        "profesional_id": profesional_id,
         "sucursales": sucursales,
         "total_height_px": total_height_px,
         "horas_labels": horas_labels,
@@ -241,13 +293,51 @@ def crear_cita(request):
         return redirect('agenda')
     fecha_str = request.POST.get('fecha', '')
     try:
-        paciente = get_object_or_404(Paciente, id=request.POST.get('paciente'))
         servicio = get_object_or_404(Servicio, id=request.POST.get('servicio'))
         profesional = get_object_or_404(Profesional, id=request.POST.get('profesional'))
-        sucursal = profesional.sucursal_principal or Sucursal.objects.filter(activo=True).first()
+        sucursal = profesional.sucursal_principal or Sucursal.objects.filter(activa=True).first()
         if not sucursal:
             messages.error(request, 'No hay sucursal activa. Créala en Administración.')
             return redirect(f'/agenda/?fecha={fecha_str}')
+
+        # ── Paciente: existente o nuevo ──────────────────────────────
+        modo_paciente = request.POST.get('modo_paciente', 'existente')
+        if modo_paciente == 'nuevo':
+            nc_rut = (request.POST.get('nc_rut', '') or '').strip()
+            nc_nombres = (request.POST.get('nc_nombres', '') or '').strip()
+            nc_apellidos = (request.POST.get('nc_apellidos', '') or '').strip()
+            nc_telefono = (request.POST.get('nc_telefono', '') or '').strip()
+            nc_email = (request.POST.get('nc_email', '') or '').strip()
+            nc_fecha_nac = request.POST.get('nc_fecha_nacimiento') or None
+
+            # Validaciones básicas antes de tocar la BD.
+            if not nc_rut or not nc_nombres or not nc_telefono:
+                messages.error(request, 'Para crear un nuevo cliente debes ingresar al menos RUT, Nombre y Teléfono.')
+                return redirect(f'/agenda/?fecha={fecha_str}')
+
+            # Si ya existe un paciente con ese RUT, lo reutilizamos en vez de
+            # fallar — evita frustración por duplicados.
+            paciente_existente = Paciente.objects.filter(rut=nc_rut).first()
+            if paciente_existente:
+                paciente = paciente_existente
+                messages.info(request,
+                    f'Ya existía un paciente con RUT {nc_rut} ({paciente.nombres}); se usó ese registro.')
+            else:
+                paciente = Paciente(
+                    sucursal=sucursal,
+                    rut=nc_rut,
+                    nombres=nc_nombres,
+                    apellidos=nc_apellidos,
+                    telefono=nc_telefono,
+                    email=nc_email,
+                    fecha_nacimiento=nc_fecha_nac,
+                    tipo_cliente='nuevo',
+                )
+                paciente.full_clean()  # valida formato de teléfono, etc.
+                paciente.save()
+        else:
+            paciente = get_object_or_404(Paciente, id=request.POST.get('paciente'))
+
         hora_str = request.POST.get('hora_inicio', '')
         fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
         hora = datetime.strptime(hora_str, '%H:%M').time()
@@ -260,8 +350,11 @@ def crear_cita(request):
         messages.success(request,
             f'Cita agendada: {paciente.nombres} {paciente.apellidos} · {servicio.nombre} · {hora.strftime("%H:%M")}')
     except ValidationError as e:
-        for msg in e.messages:
-            messages.error(request, msg)
+        # Acumula mensajes legibles tanto de dicts como de listas.
+        msgs = e.message_dict.values() if hasattr(e, 'message_dict') else [e.messages]
+        for grupo in msgs:
+            for msg in grupo:
+                messages.error(request, msg)
     except Exception as e:
         messages.error(request, f'No se pudo agendar: {e}')
     return redirect(f'/agenda/?fecha={fecha_str}')
@@ -319,14 +412,28 @@ def detalle_cita(request, cita_id):
             'fecha_solicitud': desc.fecha_solicitud.strftime('%d/%m/%Y %H:%M') if desc.fecha_solicitud else None,
         })
 
+    # ¿La cita ya tiene un registro de atención clínica asociado?
+    # OneToOneField inverso: usar try/except para evitar DoesNotExist en acceso.
+    try:
+        registro_obj = cita.registro_atencion
+        tiene_registro = True
+        registro_atencion_id = registro_obj.id
+    except RegistroAtencion.DoesNotExist:
+        tiene_registro = False
+        registro_atencion_id = None
+
     return JsonResponse({
         'id': cita.id,
         'paciente': f"{cita.paciente.nombres} {cita.paciente.apellidos}",
+        'paciente_id': cita.paciente.id,
         'paciente_rut': cita.paciente.rut,
         'paciente_telefono': cita.paciente.telefono,
         'servicio': cita.servicio.nombre,
+        'servicio_id': cita.servicio.id,
         'profesional': str(cita.profesional),
         'profesional_id': cita.profesional.id,
+        'tiene_registro_atencion': tiene_registro,
+        'registro_atencion_id': registro_atencion_id,
         'fecha': cita.fecha.strftime('%d/%m/%Y'),
         'fecha_iso': cita.fecha.strftime('%Y-%m-%d'),
         'hora_inicio': cita.hora_inicio.strftime('%H:%M'),
@@ -2351,3 +2458,731 @@ def eliminar_producto_proveedor(request, producto_id):
     except Exception as e:
         messages.error(request, f'Error al eliminar producto: {e}')
     return redirect('productos_proveedor')
+
+
+# ── PACIENTES ─────────────────────────────────────────────────────────────
+# Reglas de clasificación automática de tipo_cliente:
+#   - nuevo:      0 o 1 cita asistida
+#   - recurrente: 2+ citas asistidas y la última fue hace ≤ 6 meses
+#   - perdido:    al menos 1 cita asistida pero la última fue hace > 6 meses
+PACIENTE_DIAS_PERDIDO = 180
+
+
+def _calcular_tipo_cliente(paciente):
+    """Devuelve el tipo_cliente sugerido para el paciente según su historial."""
+    citas_asistidas = paciente.citas.filter(estado='asistio')
+    total = citas_asistidas.count()
+    if total == 0:
+        return 'nuevo'
+    ultima = citas_asistidas.order_by('-fecha').first()
+    if ultima and (date.today() - ultima.fecha).days > PACIENTE_DIAS_PERDIDO:
+        return 'perdido'
+    if total >= 2:
+        return 'recurrente'
+    return 'nuevo'
+
+
+@login_required
+def pacientes_view(request):
+    """Listado de pacientes con búsqueda, filtros y stats."""
+    busqueda = request.GET.get('q', '').strip()
+    estado_filtro = request.GET.get('estado', '')
+    tipo_filtro = request.GET.get('tipo', '')
+
+    pacientes = Paciente.objects.select_related('sucursal').annotate(
+        n_citas=Count('citas', distinct=True),
+        n_asistidas=Count('citas', filter=Q(citas__estado='asistio'), distinct=True),
+        ultima_visita=Max('citas__fecha', filter=Q(citas__estado='asistio')),
+    ).order_by('-fecha_ingreso', 'nombres')
+
+    if busqueda:
+        pacientes = pacientes.filter(
+            Q(nombres__icontains=busqueda) |
+            Q(apellidos__icontains=busqueda) |
+            Q(rut__icontains=busqueda) |
+            Q(telefono__icontains=busqueda) |
+            Q(email__icontains=busqueda)
+        )
+
+    if estado_filtro == 'activos':
+        pacientes = pacientes.filter(activo=True)
+    elif estado_filtro == 'inactivos':
+        pacientes = pacientes.filter(activo=False)
+
+    if tipo_filtro in ('nuevo', 'recurrente', 'perdido'):
+        pacientes = pacientes.filter(tipo_cliente=tipo_filtro)
+
+    # Stats globales (no se afectan por filtros)
+    hoy = date.today()
+    primer_dia_mes = hoy.replace(day=1)
+    total = Paciente.objects.count()
+    activos = Paciente.objects.filter(activo=True).count()
+    nuevos_mes = Paciente.objects.filter(fecha_ingreso__gte=primer_dia_mes).count()
+    recurrentes = Paciente.objects.filter(tipo_cliente='recurrente', activo=True).count()
+    perdidos = Paciente.objects.filter(tipo_cliente='perdido', activo=True).count()
+
+    # Cumpleaños del mes actual (clientes activos)
+    cumpleanos_mes = Paciente.objects.filter(
+        activo=True,
+        fecha_nacimiento__month=hoy.month,
+    ).order_by('fecha_nacimiento__day')
+
+    context = {
+        'pacientes': pacientes,
+        'busqueda': busqueda,
+        'estado_selected': estado_filtro,
+        'tipo_selected': tipo_filtro,
+        'total': total,
+        'activos': activos,
+        'nuevos_mes': nuevos_mes,
+        'recurrentes': recurrentes,
+        'perdidos': perdidos,
+        'cumpleanos_mes': cumpleanos_mes,
+        'sucursales': Sucursal.objects.filter(activa=True).order_by('nombre'),
+        'generos': Paciente.GENEROS,
+    }
+    return render(request, 'core/pacientes.html', context)
+
+
+@login_required
+def paciente_detalle_view(request, paciente_id):
+    """Ficha individual del paciente con historial + KPIs."""
+    paciente = get_object_or_404(Paciente, id=paciente_id)
+
+    citas_qs = paciente.citas.select_related('servicio', 'profesional').order_by('-fecha', '-hora_inicio')
+    historial = list(citas_qs[:30])
+
+    # KPIs
+    total_citas = paciente.citas.count()
+    total_visitas = paciente.citas.filter(estado='asistio').count()
+    total_canceladas = paciente.citas.filter(estado__in=['cancelada', 'no_asistio']).count()
+    total_gastado = paciente.citas.aggregate(total=Sum('monto_pagado'))['total'] or 0
+
+    servicio_fav = paciente.citas.filter(estado='asistio').values(
+        'servicio__nombre'
+    ).annotate(n=Count('id')).order_by('-n').first()
+
+    prof_habitual = paciente.citas.filter(estado='asistio').values(
+        'profesional__id', 'profesional__nombres', 'profesional__apellidos'
+    ).annotate(n=Count('id')).order_by('-n').first()
+
+    proxima_cita = paciente.citas.filter(
+        fecha__gte=date.today(),
+        estado__in=['reservado', 'pendiente', 'confirmado', 'en_espera']
+    ).order_by('fecha', 'hora_inicio').first()
+
+    primera_visita = paciente.citas.filter(estado='asistio').order_by('fecha').first()
+
+    tipo_auto = _calcular_tipo_cliente(paciente)
+    tipo_difiere = (tipo_auto != paciente.tipo_cliente)
+
+    context = {
+        'paciente': paciente,
+        'historial': historial,
+        'total_citas': total_citas,
+        'total_visitas': total_visitas,
+        'total_canceladas': total_canceladas,
+        'total_gastado': total_gastado,
+        'servicio_fav': servicio_fav,
+        'prof_habitual': prof_habitual,
+        'proxima_cita': proxima_cita,
+        'primera_visita': primera_visita,
+        'tipo_auto': tipo_auto,
+        'tipo_difiere': tipo_difiere,
+        'sucursales': Sucursal.objects.filter(activa=True).order_by('nombre'),
+        'generos': Paciente.GENEROS,
+        'tipos_cliente': Paciente.TIPOS_CLIENTE,
+    }
+    return render(request, 'core/paciente_detalle.html', context)
+
+
+@login_required
+def crear_paciente(request):
+    if request.method != 'POST':
+        return redirect('pacientes')
+    try:
+        sucursal = Sucursal.objects.filter(activa=True).first()
+        if not sucursal:
+            messages.error(request, 'No hay sucursal activa. Créala en Administración.')
+            return redirect('pacientes')
+
+        rut = (request.POST.get('rut', '') or '').strip()
+        nombres = (request.POST.get('nombres', '') or '').strip()
+        telefono = (request.POST.get('telefono', '') or '').strip()
+
+        if not rut or not nombres or not telefono:
+            messages.error(request, 'RUT, Nombres y Teléfono son obligatorios.')
+            return redirect('pacientes')
+
+        if Paciente.objects.filter(rut=rut).exists():
+            messages.error(request, f'Ya existe un paciente con RUT {rut}.')
+            return redirect('pacientes')
+
+        paciente = Paciente(
+            sucursal=sucursal,
+            rut=rut,
+            nombres=nombres,
+            apellidos=(request.POST.get('apellidos', '') or '').strip(),
+            telefono=telefono,
+            email=(request.POST.get('email', '') or '').strip(),
+            fecha_nacimiento=request.POST.get('fecha_nacimiento') or None,
+            genero=request.POST.get('genero', ''),
+            origen=(request.POST.get('origen', '') or '').strip(),
+            observaciones=(request.POST.get('observaciones', '') or '').strip(),
+            tipo_cliente='nuevo',
+        )
+        paciente.full_clean()
+        paciente.save()
+        messages.success(request, f'Paciente "{paciente.nombres} {paciente.apellidos}" creado correctamente.')
+        return redirect('paciente_detalle', paciente_id=paciente.id)
+    except ValidationError as e:
+        grupos = e.message_dict.values() if hasattr(e, 'message_dict') else [e.messages]
+        for grupo in grupos:
+            for m in grupo:
+                messages.error(request, m)
+    except Exception as e:
+        messages.error(request, f'Error al crear paciente: {e}')
+    return redirect('pacientes')
+
+
+@login_required
+def editar_paciente(request, paciente_id):
+    paciente = get_object_or_404(Paciente, id=paciente_id)
+    if request.method != 'POST':
+        return redirect('paciente_detalle', paciente_id=paciente_id)
+    try:
+        rut_nuevo = (request.POST.get('rut', '') or '').strip()
+        if rut_nuevo and rut_nuevo != paciente.rut and \
+           Paciente.objects.filter(rut=rut_nuevo).exclude(id=paciente.id).exists():
+            messages.error(request, f'Ya existe otro paciente con RUT {rut_nuevo}.')
+            return redirect('paciente_detalle', paciente_id=paciente_id)
+
+        if rut_nuevo:
+            paciente.rut = rut_nuevo
+        paciente.nombres = (request.POST.get('nombres', '') or '').strip() or paciente.nombres
+        paciente.apellidos = (request.POST.get('apellidos', '') or '').strip()
+        paciente.telefono = (request.POST.get('telefono', '') or '').strip() or paciente.telefono
+        paciente.email = (request.POST.get('email', '') or '').strip()
+        paciente.fecha_nacimiento = request.POST.get('fecha_nacimiento') or None
+        paciente.genero = request.POST.get('genero', '')
+        paciente.origen = (request.POST.get('origen', '') or '').strip()
+        paciente.observaciones = (request.POST.get('observaciones', '') or '').strip()
+
+        tipo_post = request.POST.get('tipo_cliente', '')
+        if tipo_post in ('nuevo', 'recurrente', 'perdido'):
+            paciente.tipo_cliente = tipo_post
+
+        paciente.full_clean()
+        paciente.save()
+        messages.success(request, 'Paciente actualizado correctamente.')
+    except ValidationError as e:
+        grupos = e.message_dict.values() if hasattr(e, 'message_dict') else [e.messages]
+        for grupo in grupos:
+            for m in grupo:
+                messages.error(request, m)
+    except Exception as e:
+        messages.error(request, f'Error al editar: {e}')
+    return redirect('paciente_detalle', paciente_id=paciente_id)
+
+
+@login_required
+def toggle_paciente(request, paciente_id):
+    paciente = get_object_or_404(Paciente, id=paciente_id)
+    paciente.activo = not paciente.activo
+    paciente.save()
+    estado_txt = 'activado' if paciente.activo else 'desactivado'
+    messages.success(request, f'Paciente {paciente.nombres} {estado_txt}.')
+    next_url = request.POST.get('next') or request.GET.get('next') or 'pacientes'
+    if next_url == 'detalle':
+        return redirect('paciente_detalle', paciente_id=paciente_id)
+    return redirect('pacientes')
+
+
+@login_required
+def reclasificar_paciente(request, paciente_id):
+    """Aplica la clasificación automática de tipo_cliente al paciente."""
+    paciente = get_object_or_404(Paciente, id=paciente_id)
+    nuevo_tipo = _calcular_tipo_cliente(paciente)
+    if nuevo_tipo != paciente.tipo_cliente:
+        paciente.tipo_cliente = nuevo_tipo
+        paciente.save(update_fields=['tipo_cliente'])
+        messages.success(request, f'Tipo reclasificado a: {paciente.get_tipo_cliente_display()}.')
+    else:
+        messages.info(request, 'El tipo de cliente ya coincide con la regla automática.')
+    return redirect('paciente_detalle', paciente_id=paciente_id)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# FICHA CLÍNICA
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _get_client_ip(request):
+    """Obtiene la IP del cliente respetando X-Forwarded-For si hay proxy."""
+    xff = request.META.get('HTTP_X_FORWARDED_FOR', '')
+    if xff:
+        return xff.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR')
+
+
+def _log_ficha(request, paciente, accion, detalle=''):
+    """Registra una acción de auditoría sobre la ficha clínica."""
+    try:
+        AuditLogFicha.objects.create(
+            usuario=request.user if request.user.is_authenticated else None,
+            paciente=paciente,
+            accion=accion,
+            detalle=detalle[:250],
+            ip_address=_get_client_ip(request),
+        )
+    except Exception:
+        # No bloquear la operación si el log falla — pero idealmente loggear esto.
+        pass
+
+
+def _puede_ver_ficha(user):
+    """Cualquier usuario staff o profesional activo puede ver fichas."""
+    if not user.is_authenticated:
+        return False
+    if user.is_staff:
+        return True
+    # Profesional activo
+    return Profesional.objects.filter(usuario=user, activo=True).exists() \
+        if hasattr(Profesional, 'usuario') else True
+
+
+def _puede_editar_registro(user, registro):
+    """Solo el profesional que creó el registro o staff pueden editar/borrar.
+
+    El resto del equipo puede VER (para coordinar tratamientos) pero no EDITAR.
+    """
+    if not user.is_authenticated:
+        return False
+    if user.is_staff:
+        return True
+    # El usuario es el profesional asignado
+    prof = getattr(user, 'profesional', None)
+    if prof and registro.profesional_id == prof.id:
+        return True
+    # Fallback: el campo creado_por matchea
+    return registro.creado_por_id == user.id
+
+
+@login_required
+def ficha_clinica_view(request, paciente_id):
+    """Vista principal de la ficha clínica de un paciente.
+
+    Muestra: antecedentes (editable), timeline de registros de atención,
+    galería de fotos de evolución.
+    """
+    paciente = get_object_or_404(Paciente, id=paciente_id)
+
+    if not _puede_ver_ficha(request.user):
+        messages.error(request, 'No tienes permisos para ver fichas clínicas.')
+        return redirect('paciente_detalle', paciente_id=paciente_id)
+
+    # Antecedentes — crear instancia vacía si no existe
+    antecedentes, _ = FichaClinicaPaciente.objects.get_or_create(paciente=paciente)
+
+    # Registros de atención — prefetch fotos para mostrarlas dentro de cada registro
+    from django.db.models import Prefetch
+    registros = paciente.registros_atencion.select_related(
+        'profesional', 'servicio', 'cita', 'cita__servicio'
+    ).prefetch_related(
+        Prefetch(
+            'fotos',
+            queryset=FotoEvolucion.objects.order_by('-fecha', '-subido_en'),
+            to_attr='fotos_lista'
+        )
+    ).order_by('-fecha_atencion', '-creado_en')
+
+    # Fotos totales (para galería resumen) y las que no tienen registro asociado
+    fotos = paciente.fotos_evolucion.select_related('registro', 'registro__servicio',
+                                                     'registro__profesional').order_by('-fecha', '-subido_en')
+    fotos_sin_registro = fotos.filter(registro__isnull=True)
+
+    # Citas asistidas SIN registro asociado (para sugerir crear uno)
+    citas_sin_registro = paciente.citas.filter(
+        estado='asistio', registro_atencion__isnull=True
+    ).select_related('servicio', 'profesional').order_by('-fecha')[:5]
+
+    # Profesionales y servicios activos (para selects en formularios)
+    profesionales_activos = Profesional.objects.filter(activo=True).order_by('nombres', 'apellidos')
+    servicios_activos = Servicio.objects.filter(activo=True).select_related('unidad_negocio').order_by('nombre')
+
+    # Lista serializable para JS (vía json_script — escapado seguro de cualquier carácter)
+    servicios_json = [
+        {
+            'id': s.id,
+            'nombre': s.nombre,
+            'unidad': s.unidad_negocio.nombre if s.unidad_negocio else '',
+        }
+        for s in servicios_activos
+    ]
+
+    # Audit log de los últimos 20 accesos
+    auditoria_reciente = paciente.log_ficha.select_related('usuario').order_by('-timestamp')[:20]
+
+    # Pre-carga desde agenda (?nuevo_para_cita=<id>): si hay una cita en la URL,
+    # el template abrirá el modal de "Nuevo registro" pre-rellenado.
+    nueva_cita_id = request.GET.get('nuevo_para_cita', '')
+    nueva_cita_data = None
+    if nueva_cita_id:
+        try:
+            c = Cita.objects.select_related('servicio', 'profesional').get(
+                id=int(nueva_cita_id), paciente=paciente
+            )
+            # Solo pre-cargar si la cita aún no tiene registro
+            ya_tiene = RegistroAtencion.objects.filter(cita=c).exists()
+            if not ya_tiene:
+                nueva_cita_data = {
+                    'id': c.id,
+                    'fecha': c.fecha.strftime('%Y-%m-%d'),
+                    'profesional_id': c.profesional.id,
+                    'servicio_id': c.servicio.id,
+                    'servicio_nombre': c.servicio.nombre,
+                }
+        except (ValueError, Cita.DoesNotExist):
+            pass
+
+    # Registrar este acceso
+    _log_ficha(request, paciente, 'view', f'Ficha consultada por {request.user.username}')
+
+    context = {
+        'paciente': paciente,
+        'antecedentes': antecedentes,
+        'registros': registros,
+        'fotos': fotos,
+        'fotos_sin_registro': fotos_sin_registro,
+        'citas_sin_registro': citas_sin_registro,
+        'profesionales_activos': profesionales_activos,
+        'servicios_activos': servicios_activos,
+        'servicios_json': servicios_json,
+        'auditoria_reciente': auditoria_reciente,
+        'embarazo_opciones': FichaClinicaPaciente.EMBARAZO_OPCIONES,
+        'tipos_foto': FotoEvolucion.TIPOS,
+        'puede_editar_antecedentes': _puede_ver_ficha(request.user),
+        'nueva_cita_data': nueva_cita_data,
+    }
+    return render(request, 'core/ficha_clinica.html', context)
+
+
+@login_required
+def guardar_antecedentes(request, paciente_id):
+    """Guarda/actualiza los antecedentes médicos del paciente."""
+    paciente = get_object_or_404(Paciente, id=paciente_id)
+    if not _puede_ver_ficha(request.user):
+        messages.error(request, 'Sin permisos.')
+        return redirect('paciente_detalle', paciente_id=paciente_id)
+    if request.method != 'POST':
+        return redirect('ficha_clinica', paciente_id=paciente_id)
+
+    antecedentes, creado = FichaClinicaPaciente.objects.get_or_create(paciente=paciente)
+    antecedentes.alergias = request.POST.get('alergias', '').strip()
+    antecedentes.enfermedades_cronicas = request.POST.get('enfermedades_cronicas', '').strip()
+    antecedentes.medicamentos_actuales = request.POST.get('medicamentos_actuales', '').strip()
+    antecedentes.cirugias_previas = request.POST.get('cirugias_previas', '').strip()
+    antecedentes.antecedentes_esteticos = request.POST.get('antecedentes_esteticos', '').strip()
+    antecedentes.contraindicaciones = request.POST.get('contraindicaciones', '').strip()
+    embarazo = request.POST.get('embarazo_lactancia', 'no_aplica')
+    if embarazo in dict(FichaClinicaPaciente.EMBARAZO_OPCIONES):
+        antecedentes.embarazo_lactancia = embarazo
+    antecedentes.actualizado_por = request.user
+    antecedentes.save()
+
+    _log_ficha(
+        request, paciente,
+        'antecedentes_create' if creado else 'antecedentes_update',
+        'Antecedentes guardados'
+    )
+    messages.success(request, 'Antecedentes guardados correctamente.')
+    return redirect('ficha_clinica', paciente_id=paciente_id)
+
+
+@login_required
+def crear_registro_atencion(request, paciente_id):
+    """Crea un nuevo registro de atención para el paciente.
+
+    Opcionalmente asociado a una cita existente vía cita_id en POST.
+    """
+    paciente = get_object_or_404(Paciente, id=paciente_id)
+    if not _puede_ver_ficha(request.user):
+        messages.error(request, 'Sin permisos.')
+        return redirect('paciente_detalle', paciente_id=paciente_id)
+    if request.method != 'POST':
+        return redirect('ficha_clinica', paciente_id=paciente_id)
+
+    try:
+        profesional_id = request.POST.get('profesional')
+        profesional = get_object_or_404(Profesional, id=profesional_id)
+
+        cita = None
+        cita_id = request.POST.get('cita') or None
+        if cita_id:
+            cita = get_object_or_404(Cita, id=cita_id, paciente=paciente)
+            # Si ya tiene registro, redirigir a edit en vez de crear duplicado
+            if hasattr(cita, 'registro_atencion'):
+                messages.warning(request, 'Esa cita ya tiene un registro de atención.')
+                return redirect('ficha_clinica', paciente_id=paciente_id)
+
+        fecha_str = request.POST.get('fecha_atencion', '')
+        try:
+            fecha_atencion = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            fecha_atencion = date.today()
+
+        procedimiento = request.POST.get('procedimiento_realizado', '').strip()
+        if not procedimiento:
+            messages.error(request, 'El campo "Procedimiento realizado" es obligatorio.')
+            return redirect('ficha_clinica', paciente_id=paciente_id)
+
+        # Servicio opcional
+        servicio = None
+        servicio_id = request.POST.get('servicio') or None
+        if servicio_id:
+            servicio = Servicio.objects.filter(id=servicio_id).first()
+
+        registro = RegistroAtencion.objects.create(
+            paciente=paciente,
+            cita=cita,
+            profesional=profesional,
+            servicio=servicio,
+            fecha_atencion=fecha_atencion,
+            motivo_consulta=request.POST.get('motivo_consulta', '').strip(),
+            procedimiento_realizado=procedimiento,
+            productos_utilizados=request.POST.get('productos_utilizados', '').strip(),
+            aparatologia=request.POST.get('aparatologia', '').strip(),
+            zonas_tratadas=request.POST.get('zonas_tratadas', '').strip(),
+            parametros=request.POST.get('parametros', '').strip(),
+            observaciones=request.POST.get('observaciones', '').strip(),
+            indicaciones_post=request.POST.get('indicaciones_post', '').strip(),
+            plan_proxima_sesion=request.POST.get('plan_proxima_sesion', '').strip(),
+            creado_por=request.user,
+            actualizado_por=request.user,
+        )
+        _log_ficha(
+            request, paciente, 'registro_create',
+            f'Registro #{registro.id} creado ({fecha_atencion})'
+        )
+        messages.success(request, 'Registro de atención creado correctamente.')
+    except Exception as e:
+        messages.error(request, f'Error al crear registro: {e}')
+    return redirect('ficha_clinica', paciente_id=paciente_id)
+
+
+@login_required
+def editar_registro_atencion(request, registro_id):
+    """Edita un registro existente. Solo el creador o staff pueden."""
+    registro = get_object_or_404(RegistroAtencion, id=registro_id)
+    paciente_id = registro.paciente_id
+
+    if not _puede_editar_registro(request.user, registro):
+        messages.error(request, 'Solo el profesional que creó este registro (o un admin) puede editarlo.')
+        return redirect('ficha_clinica', paciente_id=paciente_id)
+    if request.method != 'POST':
+        return redirect('ficha_clinica', paciente_id=paciente_id)
+
+    try:
+        # Servicio opcional (puede actualizarse)
+        servicio_id = request.POST.get('servicio') or None
+        if servicio_id:
+            registro.servicio = Servicio.objects.filter(id=servicio_id).first()
+        else:
+            registro.servicio = None
+
+        registro.motivo_consulta = request.POST.get('motivo_consulta', '').strip()
+        registro.procedimiento_realizado = request.POST.get('procedimiento_realizado', '').strip()
+        registro.productos_utilizados = request.POST.get('productos_utilizados', '').strip()
+        registro.aparatologia = request.POST.get('aparatologia', '').strip()
+        registro.zonas_tratadas = request.POST.get('zonas_tratadas', '').strip()
+        registro.parametros = request.POST.get('parametros', '').strip()
+        registro.observaciones = request.POST.get('observaciones', '').strip()
+        registro.indicaciones_post = request.POST.get('indicaciones_post', '').strip()
+        registro.plan_proxima_sesion = request.POST.get('plan_proxima_sesion', '').strip()
+        registro.actualizado_por = request.user
+        registro.save()
+        _log_ficha(request, registro.paciente, 'registro_update', f'Registro #{registro.id} editado')
+        messages.success(request, 'Registro actualizado.')
+    except Exception as e:
+        messages.error(request, f'Error al editar registro: {e}')
+    return redirect('ficha_clinica', paciente_id=paciente_id)
+
+
+@login_required
+def eliminar_registro_atencion(request, registro_id):
+    """Elimina un registro. Solo el creador o staff."""
+    registro = get_object_or_404(RegistroAtencion, id=registro_id)
+    paciente_id = registro.paciente_id
+    if not _puede_editar_registro(request.user, registro):
+        messages.error(request, 'Sin permisos para eliminar este registro.')
+        return redirect('ficha_clinica', paciente_id=paciente_id)
+    if request.method != 'POST':
+        return redirect('ficha_clinica', paciente_id=paciente_id)
+    rid = registro.id
+    registro.delete()
+    _log_ficha(request, get_object_or_404(Paciente, id=paciente_id),
+               'registro_delete', f'Registro #{rid} eliminado')
+    messages.success(request, 'Registro eliminado.')
+    return redirect('ficha_clinica', paciente_id=paciente_id)
+
+
+@login_required
+def subir_foto_evolucion(request, paciente_id):
+    """Sube una foto de evolución asociada al paciente."""
+    paciente = get_object_or_404(Paciente, id=paciente_id)
+    if not _puede_ver_ficha(request.user):
+        messages.error(request, 'Sin permisos.')
+        return redirect('paciente_detalle', paciente_id=paciente_id)
+    if request.method != 'POST':
+        return redirect('ficha_clinica', paciente_id=paciente_id)
+
+    archivo = request.FILES.get('archivo')
+    if not archivo:
+        messages.error(request, 'Debes seleccionar una imagen.')
+        return redirect('ficha_clinica', paciente_id=paciente_id)
+
+    # Validación básica de tipo y tamaño
+    if archivo.size > 10 * 1024 * 1024:
+        messages.error(request, 'La imagen no puede superar 10 MB.')
+        return redirect('ficha_clinica', paciente_id=paciente_id)
+    nombre = archivo.name.lower()
+    if not any(nombre.endswith(ext) for ext in ('.jpg', '.jpeg', '.png', '.webp', '.heic')):
+        messages.error(request, 'Formato no soportado. Usa JPG, PNG, WEBP o HEIC.')
+        return redirect('ficha_clinica', paciente_id=paciente_id)
+
+    try:
+        fecha_str = request.POST.get('fecha', '')
+        try:
+            fecha_foto = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            fecha_foto = date.today()
+
+        registro_id = request.POST.get('registro') or None
+        registro = None
+        if registro_id:
+            registro = RegistroAtencion.objects.filter(id=registro_id, paciente=paciente).first()
+
+        foto = FotoEvolucion.objects.create(
+            paciente=paciente,
+            registro=registro,
+            archivo=archivo,
+            tipo=request.POST.get('tipo', 'otro'),
+            zona=request.POST.get('zona', '').strip(),
+            descripcion=request.POST.get('descripcion', '').strip(),
+            fecha=fecha_foto,
+            subido_por=request.user,
+        )
+        _log_ficha(request, paciente, 'foto_upload', f'Foto #{foto.id} ({foto.tipo}) subida')
+        messages.success(request, 'Foto subida correctamente.')
+    except Exception as e:
+        messages.error(request, f'Error al subir foto: {e}')
+    return redirect('ficha_clinica', paciente_id=paciente_id)
+
+
+@login_required
+def editar_foto_evolucion(request, foto_id):
+    """Edita metadata de una foto (tipo, zona, descripción, fecha, registro).
+
+    Opcionalmente permite REEMPLAZAR el archivo si el usuario sube uno nuevo
+    (útil cuando la foto original quedó borrosa o se subió la incorrecta).
+    """
+    foto = get_object_or_404(FotoEvolucion, id=foto_id)
+    paciente_id = foto.paciente_id
+
+    if not (request.user.is_staff or foto.subido_por_id == request.user.id):
+        messages.error(request, 'Solo quien subió la foto (o un admin) puede editarla.')
+        return redirect('ficha_clinica', paciente_id=paciente_id)
+    if request.method != 'POST':
+        return redirect('ficha_clinica', paciente_id=paciente_id)
+
+    try:
+        # Metadata
+        tipo_post = request.POST.get('tipo', foto.tipo)
+        if tipo_post in dict(FotoEvolucion.TIPOS):
+            foto.tipo = tipo_post
+
+        foto.zona = (request.POST.get('zona', '') or '').strip()
+        foto.descripcion = (request.POST.get('descripcion', '') or '').strip()
+
+        fecha_str = request.POST.get('fecha', '')
+        if fecha_str:
+            try:
+                foto.fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+            except (ValueError, TypeError):
+                pass
+
+        # Asociación con registro de atención (puede cambiar o quitarse)
+        registro_id = request.POST.get('registro') or None
+        if registro_id:
+            foto.registro = RegistroAtencion.objects.filter(
+                id=registro_id, paciente_id=paciente_id
+            ).first()
+        else:
+            foto.registro = None
+
+        # OPCIONAL: reemplazar el archivo si subieron uno nuevo
+        nuevo_archivo = request.FILES.get('archivo')
+        if nuevo_archivo:
+            if nuevo_archivo.size > 10 * 1024 * 1024:
+                messages.error(request, 'La nueva imagen no puede superar 10 MB.')
+                return redirect('ficha_clinica', paciente_id=paciente_id)
+            nombre = nuevo_archivo.name.lower()
+            if not any(nombre.endswith(ext) for ext in ('.jpg', '.jpeg', '.png', '.webp', '.heic')):
+                messages.error(request, 'Formato no soportado. Usa JPG, PNG, WEBP o HEIC.')
+                return redirect('ficha_clinica', paciente_id=paciente_id)
+            # Borrar el archivo viejo del disco antes de reemplazarlo
+            if foto.archivo and foto.archivo.storage.exists(foto.archivo.name):
+                foto.archivo.delete(save=False)
+            foto.archivo = nuevo_archivo
+
+        foto.save()
+        _log_ficha(
+            request, foto.paciente, 'foto_upload',
+            f'Foto #{foto.id} editada' + (' (archivo reemplazado)' if nuevo_archivo else '')
+        )
+        messages.success(request, 'Foto actualizada correctamente.')
+    except Exception as e:
+        messages.error(request, f'Error al editar foto: {e}')
+    return redirect('ficha_clinica', paciente_id=paciente_id)
+
+
+@login_required
+def eliminar_foto_evolucion(request, foto_id):
+    """Elimina una foto. Solo el que subió o staff pueden."""
+    foto = get_object_or_404(FotoEvolucion, id=foto_id)
+    paciente_id = foto.paciente_id
+    if not (request.user.is_staff or foto.subido_por_id == request.user.id):
+        messages.error(request, 'Solo el que subió la foto (o un admin) puede eliminarla.')
+        return redirect('ficha_clinica', paciente_id=paciente_id)
+    if request.method != 'POST':
+        return redirect('ficha_clinica', paciente_id=paciente_id)
+    fid = foto.id
+    try:
+        # Borrar el archivo físico
+        if foto.archivo and foto.archivo.storage.exists(foto.archivo.name):
+            foto.archivo.delete(save=False)
+        foto.delete()
+        _log_ficha(request, get_object_or_404(Paciente, id=paciente_id),
+                   'foto_delete', f'Foto #{fid} eliminada')
+        messages.success(request, 'Foto eliminada.')
+    except Exception as e:
+        messages.error(request, f'Error al eliminar foto: {e}')
+    return redirect('ficha_clinica', paciente_id=paciente_id)
+
+
+@login_required
+def servir_foto_evolucion(request, foto_id):
+    """Sirve una foto de evolución con verificación de permisos.
+
+    NO usamos MEDIA_URL directo porque eso bypasea la auth. Toda foto pasa
+    por esta vista que valida que el usuario tenga permiso de ver fichas.
+    """
+    from django.http import FileResponse, Http404
+
+    foto = get_object_or_404(FotoEvolucion, id=foto_id)
+    if not _puede_ver_ficha(request.user):
+        raise Http404("No autorizado")
+    if not foto.archivo or not foto.archivo.storage.exists(foto.archivo.name):
+        raise Http404("Archivo no encontrado")
+
+    _log_ficha(request, foto.paciente, 'foto_view', f'Foto #{foto.id} vista')
+    return FileResponse(foto.archivo.open('rb'), content_type='image/jpeg')

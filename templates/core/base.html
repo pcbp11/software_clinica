@@ -294,11 +294,16 @@
     .btn-danger:hover { background: #f9d5d5; }
     .btn-sm { padding: 5px 12px; font-size: 0.78rem; }
     .btn-success {
-      background: var(--accent-light);
-      color: var(--accent-hover);
-      border: 1px solid #c8e8d8;
+      background: #eef7f1;
+      color: #2e7d55;
+      border: 1px solid #cfe7d8;
+      font-weight: 500;
     }
-    .btn-success:hover { background: #d4eddf; }
+    .btn-success:hover {
+      background: #e0efe6;
+      border-color: #a9d4ba;
+      color: #1f6b46;
+    }
 
     /* ── Contenido ── */
     .page-content { padding: 28px 32px; flex: 1; }
@@ -641,6 +646,15 @@
 
       <div class="nav-group">
         <div class="nav-group-label">Pacientes</div>
+        <a href="{% url 'pacientes' %}" class="nav-item {% if request.resolver_match.url_name == 'pacientes' or request.resolver_match.url_name == 'paciente_detalle' %}active{% endif %}">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          Base de pacientes
+        </a>
         <a href="{% url 'seguimientos' %}" class="nav-item {% if request.resolver_match.url_name == 'seguimientos' %}active{% endif %}">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>

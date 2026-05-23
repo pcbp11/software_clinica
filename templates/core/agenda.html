@@ -1,9 +1,9 @@
 {% extends "core/base.html" %}
 {% load clinica_tags %}
 
-{% block title %}Agenda · {{ fecha|date:"d/m/Y" }}{% endblock %}
+{% block title %}Agenda · {% if vista_semana %}{{ semana_lunes|date:"d/m" }}–{{ semana_domingo|date:"d/m/Y" }}{% else %}{{ fecha|date:"d/m/Y" }}{% endif %}{% endblock %}
 {% block page_title %}Agenda{% endblock %}
-{% block page_subtitle %}{% endblock %}
+{% block page_subtitle %}{% if vista_semana %}Semana del {{ semana_lunes|date:"j \d\e F" }} al {{ semana_domingo|date:"j \d\e F, Y" }}{% endif %}{% endblock %}
 
 {% block extra_head %}
 <!-- Flatpickr date picker -->
@@ -273,14 +273,16 @@
   .cal-head-row th {
     background: #ffffff !important;
     border-bottom: 1px solid var(--border);
-    padding: 14px 12px 12px !important;
+    padding: 14px 8px 12px !important;
     text-align: center !important;
-    min-width: 150px;
+    min-width: 130px;
     position: sticky !important;
     top: 0 !important;
     z-index: 20 !important;
     transition: background 0.15s;
   }
+  /* Modo filtro individual: una sola columna ocupa todo el ancho */
+  .cal-head-row.solo th:not(.cal-corner) { min-width: 0; width: auto; }
   /* Esquina superior izquierda — sticky en ambos ejes */
   .cal-corner {
     width: 60px !important; min-width: 60px !important;
@@ -318,9 +320,125 @@
   .pro-avatar img {
     width: 100%; height: 100%; object-fit: cover; border-radius: 50%;
   }
-  .pro-name { font-size: 0.8rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; letter-spacing: -0.005em; }
-  .pro-subtitle { font-size: 0.68rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; margin-top: 2px; }
-  .pro-header-wrap { gap: 6px !important; padding: 2px 0; }
+  /* Nombres responsive: wrap a 2 líneas, ocupan el ancho disponible de la
+     columna sin truncar con "...". Si entra completo en una línea, queda en
+     una sola; si no, se reparte en 2. Más allá de 2 sí se trunca. */
+  .pro-name {
+    font-size: 0.8rem; font-weight: 600; color: var(--text-primary);
+    letter-spacing: -0.005em;
+    width: 100%; max-width: 100%;
+    line-height: 1.2;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+    text-align: center;
+  }
+  .pro-subtitle {
+    font-size: 0.68rem; color: var(--text-muted);
+    width: 100%; max-width: 100%;
+    line-height: 1.2;
+    margin-top: 2px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+    text-align: center;
+  }
+  .pro-header-wrap { gap: 6px !important; padding: 2px 0; position: relative; }
+
+  /* Header de columna en modo SEMANA (día de la semana) */
+  .dia-header {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 4px 0;
+  }
+  .dia-header-label {
+    font-size: 0.78rem; font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: capitalize;
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+    text-align: center;
+  }
+  .dia-header.es-hoy .dia-header-label {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .dia-header.es-hoy::after {
+    content: '';
+    display: block;
+    width: 28px;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 2px;
+    margin-top: 4px;
+  }
+
+  /* Botón "ver solo este profesional" (ojo) */
+  .btn-solo-prof {
+    position: absolute;
+    top: -2px; right: -2px;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--text-muted);
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: all 0.18s ease;
+    padding: 0;
+    z-index: 5;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .cal-head-row th:hover .btn-solo-prof,
+  .btn-solo-prof:focus { opacity: 1; }
+  .btn-solo-prof:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    transform: scale(1.1);
+  }
+
+  /* Chip de filtro activo (cuando se filtró por un profesional) */
+  .filtro-prof-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px 6px 14px;
+    background: linear-gradient(135deg, var(--accent-light) 0%, #e8f4ee 100%);
+    border: 1px solid #c8e8d8;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--accent-hover, #2e7d55);
+    box-shadow: 0 1px 3px rgba(46,125,85,0.08);
+  }
+  .filtro-prof-chip .chip-avatar {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--accent);
+    color: #fff; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 0.68rem; font-weight: 600;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .filtro-prof-chip .chip-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .filtro-prof-chip .chip-close {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,255,255,0.6);
+    color: var(--accent-hover, #2e7d55);
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0;
+    text-decoration: none;
+    transition: background 0.15s;
+  }
+  .filtro-prof-chip .chip-close:hover { background: #fff; }
 
   /* Gutter horas — sticky nativo al hacer scroll horizontal.
      padding-top: empuja el contenido hacia abajo para que el primer label
@@ -617,6 +735,23 @@
     background: var(--bg-main); border: 1px solid var(--border);
     border-radius: 10px; padding: 14px; margin-top: 10px;
   }
+
+  /* Botones de pago en modal de cita — colores suaves con mayor especificidad
+     para asegurar que ganan sobre el .btn-success del base.html */
+  button#md-btn-pago-total.btn-success,
+  button#md-btn-pago-saldo.btn-success {
+    background: #eef7f1 !important;
+    color: #2e7d55 !important;
+    border: 1px solid #cfe7d8 !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+  }
+  button#md-btn-pago-total.btn-success:hover,
+  button#md-btn-pago-saldo.btn-success:hover {
+    background: #e0efe6 !important;
+    border-color: #a9d4ba !important;
+    color: #1f6b46 !important;
+  }
   .md-pago-form .row2 { display: flex; gap: 8px; margin-bottom: 10px; }
   .md-pago-form .row2 > * { flex: 1; }
   .md-error {
@@ -769,6 +904,92 @@
   .mc-hint a { color: var(--accent); text-decoration: none; font-weight: 500; }
   .mc-hint a:hover { color: var(--accent-hover); }
 
+  /* ── Fila label + botón "Nuevo cliente" ───────────────────────── */
+  .mc-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+  .mc-label-row .mc-label { margin-bottom: 0; }
+
+  .btn-nuevo-cliente {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--accent);
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: inherit;
+  }
+  .btn-nuevo-cliente:hover {
+    background: var(--accent-light, #e8f4ee);
+    border-color: var(--accent);
+  }
+  .btn-nuevo-cliente svg { flex-shrink: 0; }
+
+  /* ── Sección de creación de nuevo cliente ─────────────────────── */
+  .nuevo-cliente-section {
+    background: linear-gradient(180deg, #fafbf8 0%, #ffffff 100%);
+    border: 1px solid #d8e7df;
+    border-radius: 12px;
+    padding: 16px;
+    animation: nc-slide-in 0.22s ease;
+  }
+  @keyframes nc-slide-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .nc-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px dashed #d8e7df;
+  }
+  .nc-title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--accent-hover, #2e7d55);
+    line-height: 1.2;
+  }
+  .nc-subtitle {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .btn-cancelar-nc {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 0.74rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+    flex-shrink: 0;
+  }
+  .btn-cancelar-nc:hover {
+    background: #fff5f5;
+    border-color: #e0a8a8;
+    color: #c41c3b;
+  }
+  .nc-grid { gap: 12px; }
+  .nc-field { margin-bottom: 0; }
+
   .mc-collapsible {
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -909,7 +1130,7 @@
          placeholder="Selecciona una fecha"
          readonly>
 
-  <a href="?fecha={{ hoy|date:'Y-m-d' }}&servicio={{ servicio_id }}"
+  <a href="?fecha={{ hoy|date:'Y-m-d' }}{% if servicio_id %}&servicio={{ servicio_id }}{% endif %}{% if profesional_id %}&profesional={{ profesional_id }}{% endif %}"
      class="btn-nav btn-hoy {% if fecha == hoy %}activo{% endif %}">Hoy</a>
 </div>
 {% endblock %}
@@ -930,6 +1151,24 @@
     <div class="leyenda-item"><span class="leyenda-dot" style="background:#8b5cf6;"></span>Reprogramada</div>
     <div class="leyenda-item"><span class="leyenda-dot" style="background:#aaa;"></span>Cancelada</div>
   </div>
+
+  {% if profesional_id and agenda_general %}
+  {% with prof_sel=agenda_general.0.profesional %}
+  <div class="filtro-prof-chip" title="Estás viendo solo la agenda de este profesional">
+    {% if prof_sel.foto %}
+      <span class="chip-avatar"><img src="{{ prof_sel.foto.url }}" alt=""></span>
+    {% else %}
+      <span class="chip-avatar">{{ prof_sel.nombres|slice:":1" }}{{ prof_sel.apellidos|slice:":1" }}</span>
+    {% endif %}
+    <span>{{ prof_sel.nombre_publico|default:prof_sel.nombres }} {{ prof_sel.apellidos }}</span>
+    <a href="?fecha={{ fecha|date:'Y-m-d' }}{% if servicio_id %}&servicio={{ servicio_id }}{% endif %}"
+       class="chip-close"
+       title="Ver todos los profesionales"
+       aria-label="Quitar filtro">×</a>
+  </div>
+  {% endwith %}
+  {% endif %}
+
   <div class="agenda-bar-right">
     <form method="get" style="display:flex; gap:8px; align-items:center;">
       <input type="hidden" name="fecha" value="{{ fecha|date:'Y-m-d' }}">
@@ -1013,7 +1252,11 @@
     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:0.2;">
       <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
     </svg>
+    {% if vista_semana %}
+    <p>Este profesional no tiene horarios configurados para la semana del <strong>{{ semana_lunes|date:"j \d\e F" }} al {{ semana_domingo|date:"j \d\e F" }}</strong>.</p>
+    {% else %}
     <p>Ningún profesional tiene horario configurado para <strong>{{ fecha|date:"l j \d\e F" }}</strong>.</p>
+    {% endif %}
   </div>
 {% else %}
 <div class="cal-scroll">
@@ -1023,19 +1266,36 @@
         <th class="cal-corner"></th>
         {% for item in agenda_general %}
         <th>
-          <div class="pro-header-wrap">
-            {% if item.profesional.foto %}
-            <div class="pro-avatar">
-              <img src="{{ item.profesional.foto.url }}" alt="{{ item.profesional.nombres }}">
+          {% if vista_semana %}
+            {# Modo SEMANA — header con día y fecha #}
+            <div class="dia-header {% if item.es_hoy %}es-hoy{% endif %}">
+              <div class="dia-header-label">{{ item.dia|date:"l j/m" }}</div>
             </div>
-            {% else %}
-            <div class="pro-avatar">{{ item.profesional.nombres|slice:":1" }}{{ item.profesional.apellidos|slice:":1" }}</div>
-            {% endif %}
-            <div class="pro-name">{{ item.profesional.nombres }} {{ item.profesional.apellidos }}</div>
-            {% if item.profesional.nombre_publico %}
-            <div class="pro-subtitle">{{ item.profesional.nombre_publico }}</div>
-            {% endif %}
-          </div>
+          {% else %}
+            {# Modo DÍA — header con profesional (default) #}
+            <div class="pro-header-wrap">
+              <a href="?fecha={{ fecha|date:'Y-m-d' }}&profesional={{ item.profesional.id }}{% if servicio_id %}&servicio={{ servicio_id }}{% endif %}"
+                 class="btn-solo-prof"
+                 title="Ver solo a {{ item.profesional.nombres }} {{ item.profesional.apellidos }} (semana)"
+                 aria-label="Ver solo a este profesional">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              </a>
+              {% if item.profesional.foto %}
+              <div class="pro-avatar">
+                <img src="{{ item.profesional.foto.url }}" alt="{{ item.profesional.nombres }}">
+              </div>
+              {% else %}
+              <div class="pro-avatar">{{ item.profesional.nombres|slice:":1" }}{{ item.profesional.apellidos|slice:":1" }}</div>
+              {% endif %}
+              <div class="pro-name">{{ item.profesional.nombres }} {{ item.profesional.apellidos }}</div>
+              {% if item.profesional.nombre_publico %}
+              <div class="pro-subtitle">{{ item.profesional.nombre_publico }}</div>
+              {% endif %}
+            </div>
+          {% endif %}
         </th>
         {% endfor %}
       </tr>
@@ -1054,7 +1314,7 @@
           </div>
         </td>
 
-        <!-- Columna por profesional -->
+        <!-- Columna por profesional (modo día) o por día (modo semana) -->
         {% for item in agenda_general %}
         <td class="cal-col-td {% if not item.tiene_horarios %}sin-horarios-col{% endif %}">
           <div class="cal-col-inner" style="height:{{ total_height_px }}px;{% if not item.tiene_horarios %}opacity:0.4;{% endif %}">
@@ -1063,7 +1323,7 @@
             <div class="cal-hour-line" style="top:{{ lbl.top_px }}px;"></div>
             {% endfor %}
 
-            {% if hora_now_top %}
+            {% if hora_now_top and item.es_hoy %}
             <div class="cal-now-line" style="top:{{ hora_now_top }}px;"></div>
             {% endif %}
 
@@ -1072,7 +1332,7 @@
                     style="top:{{ slot.top_px }}px;"
                     data-prof-id="{{ item.profesional.id }}"
                     data-prof="{{ item.profesional|escapejs }}"
-                    data-fecha="{{ fecha|date:'Y-m-d' }}"
+                    data-fecha="{{ item.dia|date:'Y-m-d' }}"
                     data-hora="{{ slot.hora }}"
                     onclick="mostrarMenuSlot(this, event)"
                     type="button">
@@ -1160,9 +1420,7 @@
 
     <form method="post" action="{% url 'crear_cita' %}" id="form-cita">
       {% csrf_token %}
-      <input type="hidden" name="profesional" id="m-profesional">
-      <input type="hidden" name="fecha"       id="m-fecha">
-      <input type="hidden" name="hora_inicio" id="m-hora">
+      {# Profesional y Hora ahora son inputs visibles editables (ver más abajo) #}
 
       <div class="mc-body">
         <!-- Cuándo y con quién -->
@@ -1171,27 +1429,28 @@
 
           <div class="mc-grid-2">
             <div class="mc-field">
-              <label class="mc-label">Fecha</label>
-              <div class="mc-readonly-field">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                <span id="m-info-fecha">—</span>
-              </div>
+              <label class="mc-label" for="m-fecha">Fecha <span class="mc-required">*</span></label>
+              <input type="text" id="m-fecha" name="fecha"
+                     class="mc-input"
+                     placeholder="Selecciona una fecha"
+                     required>
             </div>
             <div class="mc-field">
-              <label class="mc-label">Hora</label>
-              <div class="mc-readonly-field">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                <span id="m-info-hora">—</span>
-              </div>
+              <label class="mc-label" for="m-hora">Hora <span class="mc-required">*</span></label>
+              <input type="time" id="m-hora" name="hora_inicio"
+                     class="mc-input"
+                     required>
             </div>
           </div>
 
           <div class="mc-field">
-            <label class="mc-label">Profesional</label>
-            <div class="mc-readonly-field">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              <span id="m-info-prof">—</span>
-            </div>
+            <label class="mc-label" for="m-profesional">Profesional <span class="mc-required">*</span></label>
+            <select id="m-profesional" name="profesional" class="mc-input" required>
+              <option value="">— Selecciona un profesional —</option>
+              {% for prof in todos_profesionales %}
+              <option value="{{ prof.id }}">{{ prof.nombres }} {{ prof.apellidos }}{% if prof.nombre_publico %} ({{ prof.nombre_publico }}){% endif %}</option>
+              {% endfor %}
+            </select>
           </div>
         </div>
 
@@ -1199,10 +1458,19 @@
         <div class="mc-section">
           <div class="mc-section-title">Datos de la cita</div>
 
-          <div class="mc-field">
-            <label class="mc-label" for="m-paciente">Paciente <span class="mc-required">*</span></label>
+          {# Hidden input que indica al backend qué modo usar para paciente #}
+          <input type="hidden" name="modo_paciente" id="m-modo-paciente" value="existente">
+
+          <div class="mc-field" id="m-paciente-existente-wrap">
+            <div class="mc-label-row">
+              <label class="mc-label" for="m-paciente">Paciente <span class="mc-required">*</span></label>
+              <button type="button" class="btn-nuevo-cliente" onclick="abrirNuevoCliente()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                Nuevo cliente
+              </button>
+            </div>
             <div class="search-select-wrap">
-              <input type="text" class="search-input-top mc-input" placeholder="Buscar por nombre o RUT…"
+              <input type="text" class="search-input-top mc-input" placeholder="Buscar por nombre, apellido o RUT…"
                      oninput="filtrarOpciones(this, 'm-paciente')" autocomplete="off">
               <select id="m-paciente" name="paciente" required class="search-select" size="4">
                 {% for p in pacientes %}
@@ -1212,11 +1480,48 @@
                 {% endfor %}
               </select>
             </div>
-            {% if not pacientes %}
-            <p class="mc-hint warning">
-              No hay pacientes activos. <a href="/admin/core/paciente/add/" target="_blank">Crear uno →</a>
-            </p>
-            {% endif %}
+          </div>
+
+          {# ─── Form inline: NUEVO CLIENTE (oculto por default) ─── #}
+          <div class="mc-field nuevo-cliente-section" id="m-nuevo-cliente-wrap" style="display:none;">
+            <div class="nc-header">
+              <div>
+                <div class="nc-title">Datos del nuevo cliente</div>
+                <div class="nc-subtitle">Se creará al guardar la reserva</div>
+              </div>
+              <button type="button" class="btn-cancelar-nc" onclick="cerrarNuevoCliente()" title="Volver a buscar paciente existente">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                Cancelar
+              </button>
+            </div>
+
+            <div class="mc-grid-2 nc-grid">
+              <div class="nc-field">
+                <label class="mc-label">Nombre <span class="mc-required">*</span></label>
+                <input type="text" name="nc_nombres" class="mc-input" data-nc-required maxlength="100" autocomplete="off">
+              </div>
+              <div class="nc-field">
+                <label class="mc-label">Apellido</label>
+                <input type="text" name="nc_apellidos" class="mc-input" maxlength="100" autocomplete="off">
+              </div>
+              <div class="nc-field">
+                <label class="mc-label">RUT <span class="mc-required">*</span></label>
+                <input type="text" name="nc_rut" id="nc-rut" class="mc-input" data-nc-required placeholder="12.345.678-9" maxlength="12" autocomplete="off">
+              </div>
+              <div class="nc-field">
+                <label class="mc-label">Fecha de nacimiento</label>
+                <input type="date" name="nc_fecha_nacimiento" class="mc-input">
+              </div>
+              <div class="nc-field">
+                <label class="mc-label">Teléfono <span class="mc-required">*</span></label>
+                <input type="text" name="nc_telefono" id="nc-telefono" class="mc-input" data-nc-required placeholder="+569XXXXXXXX" maxlength="12" autocomplete="off">
+                <span class="mc-hint">Formato chileno: +569 + 8 dígitos</span>
+              </div>
+              <div class="nc-field">
+                <label class="mc-label">Email</label>
+                <input type="email" name="nc_email" class="mc-input" maxlength="120" autocomplete="off">
+              </div>
+            </div>
           </div>
 
           <div class="mc-field">
@@ -1460,12 +1765,37 @@
     </div>
 
     <!-- Footer principal -->
-    <div class="modal-footer" id="md-footer-main" style="display:none; justify-content:space-between;">
-      <button type="button" onclick="mostrarReagendar()" class="btn btn-ghost" style="font-size:0.82rem;">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        Reagendar
-      </button>
-      <button type="button" onclick="cerrarDetalle()" class="btn btn-ghost">Cerrar</button>
+    <div class="modal-footer" id="md-footer-main" style="display:none; flex-direction:column; gap:10px; align-items:stretch;">
+      {# Atajo destacado a "Registrar atención" — sólo visible si cita asistida y sin registro #}
+      <div id="md-cta-atencion" style="display:none;">
+        <a href="#" id="md-link-atencion"
+           class="btn btn-primary"
+           style="display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:12px; font-size:0.9rem; text-decoration:none;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Registrar atención clínica
+        </a>
+      </div>
+
+      {# Si ya tiene registro, mostrar acceso "Ver atención registrada" #}
+      <div id="md-cta-atencion-done" style="display:none;">
+        <a href="#" id="md-link-atencion-done"
+           class="btn"
+           style="display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:10px; font-size:0.85rem; text-decoration:none; background:#e0f0e8; color:#2e7d55; border:1px solid #c8e8d8;">
+          ✓ Atención ya registrada — Ver detalle
+        </a>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; gap:8px;">
+        <a href="#" id="md-link-ficha" class="btn btn-ghost" style="font-size:0.82rem; text-decoration:none;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Ficha clínica
+        </a>
+        <button type="button" onclick="mostrarReagendar()" class="btn btn-ghost" style="font-size:0.82rem;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Reagendar
+        </button>
+        <button type="button" onclick="cerrarDetalle()" class="btn btn-ghost">Cerrar</button>
+      </div>
     </div>
 
     <!-- Footer reagendar -->
@@ -1589,30 +1919,97 @@
     if (e.key === 'Escape') cerrarPopover();
   });
 
+  // Helper: setea/limpia el datepicker Flatpickr del modal según corresponda.
+  function setFechaModal(fecha) {
+    const el = document.getElementById('m-fecha');
+    if (!el) return;
+    if (el._flatpickr) {
+      if (fecha) el._flatpickr.setDate(fecha, true);
+      else el._flatpickr.clear();
+    } else {
+      el.value = fecha || '';
+    }
+  }
+
+  // Retorna la hora actual en zona horaria de Santiago en formato HH:MM (24h),
+  // independiente de la timezone del navegador del usuario.
+  function horaActualChile() {
+    const fmt = new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: 'America/Santiago'
+    });
+    return fmt.format(new Date()); // "14:30"
+  }
+
   function abrirModal(profId, profNombre, fecha, hora) {
-    document.getElementById('m-profesional').value = profId;
-    document.getElementById('m-fecha').value = fecha;
-    document.getElementById('m-hora').value = hora;
-    document.getElementById('m-info-prof').textContent  = profNombre;
-    document.getElementById('m-info-fecha').textContent = formatearFecha(fecha);
-    document.getElementById('m-info-hora').textContent  = hora;
+    // Apertura desde un slot: pre-rellena prof + fecha + hora del slot.
+    cerrarNuevoCliente(); // por las dudas, reset al modo "paciente existente"
+    document.getElementById('m-profesional').value = profId || '';
+    setFechaModal(fecha);
+    document.getElementById('m-hora').value = hora || '';
     document.getElementById('modal-cita').style.display = 'flex';
     document.body.style.overflow = 'hidden';
     setTimeout(() => { const i = document.querySelector('.search-input-top'); if (i) i.focus(); }, 80);
   }
 
   function abrirModalLibre() {
-    const fechaInput = document.querySelector('input[name="fecha"]');
-    const fecha = fechaInput ? fechaInput.value : '{{ fecha|date:"Y-m-d" }}';
+    // Apertura desde "+ Nueva cita": fecha vacía, profesional vacío,
+    // hora pre-rellenada con la hora actual de Chile (editable).
+    cerrarNuevoCliente();
     document.getElementById('m-profesional').value = '';
-    document.getElementById('m-fecha').value = fecha;
-    document.getElementById('m-hora').value = '';
-    document.getElementById('m-info-prof').textContent  = '—';
-    document.getElementById('m-info-fecha').textContent = formatearFecha(fecha);
-    document.getElementById('m-info-hora').textContent  = '—';
+    setFechaModal('');
+    document.getElementById('m-hora').value = horaActualChile();
     document.getElementById('modal-cita').style.display = 'flex';
     document.body.style.overflow = 'hidden';
     setTimeout(() => { const i = document.querySelector('.search-input-top'); if (i) i.focus(); }, 80);
+  }
+
+  // ─── Toggle "Nuevo cliente" ────────────────────────────────────────
+  function abrirNuevoCliente() {
+    document.getElementById('m-paciente-existente-wrap').style.display = 'none';
+    document.getElementById('m-nuevo-cliente-wrap').style.display = '';
+    document.getElementById('m-modo-paciente').value = 'nuevo';
+
+    // Quitar required al select de paciente existente (no será enviado)
+    const sel = document.getElementById('m-paciente');
+    sel.required = false;
+    sel.value = '';
+    const search = document.querySelector('.search-input-top');
+    if (search) search.value = '';
+
+    // Activar required en los campos obligatorios del nuevo cliente
+    document.querySelectorAll('#m-nuevo-cliente-wrap [data-nc-required]')
+      .forEach(el => { el.required = true; });
+
+    // Foco en Nombre
+    setTimeout(() => {
+      const nombreInput = document.querySelector('[name="nc_nombres"]');
+      if (nombreInput) nombreInput.focus();
+    }, 80);
+
+    // Pre-rellenar prefijo +56 en teléfono si está vacío
+    const tel = document.getElementById('nc-telefono');
+    if (tel && !tel.value) tel.value = '+569';
+  }
+
+  function cerrarNuevoCliente() {
+    const existenteWrap = document.getElementById('m-paciente-existente-wrap');
+    const nuevoWrap = document.getElementById('m-nuevo-cliente-wrap');
+    if (!existenteWrap || !nuevoWrap) return;
+    existenteWrap.style.display = '';
+    nuevoWrap.style.display = 'none';
+    document.getElementById('m-modo-paciente').value = 'existente';
+
+    // Restablecer required al paciente existente
+    document.getElementById('m-paciente').required = true;
+
+    // Quitar required y limpiar inputs del nuevo cliente
+    nuevoWrap.querySelectorAll('input').forEach(el => {
+      el.required = false;
+      if (el.type !== 'hidden') el.value = '';
+    });
   }
 
   function cerrarModal() {
@@ -1620,6 +2017,8 @@
     document.body.style.overflow = '';
     const inp = document.querySelector('.search-input-top');
     if (inp) { inp.value = ''; filtrarOpciones(inp, 'm-paciente'); }
+    // Reset modo nuevo cliente para próxima apertura
+    cerrarNuevoCliente();
   }
 
   function filtrarOpciones(input, selectId) {
@@ -1747,12 +2146,46 @@
     document.getElementById('md-pago-obs').value   = '';
     document.getElementById('md-pago-error').style.display = 'none';
 
+    // Links de ficha clínica + registro de atención
+    actualizarBotonesFicha(d);
+
     // Mostrar
     document.getElementById('md-loading').style.display = 'none';
     const main = document.getElementById('md-main');
     main.style.display = 'flex';
     ocultarReagendar();
     document.getElementById('md-footer-main').style.display = 'flex';
+  }
+
+  /* Actualiza los enlaces y CTAs de ficha clínica / registro atención
+     según el estado de la cita y si tiene registro previo. */
+  function actualizarBotonesFicha(d) {
+    const linkFicha = document.getElementById('md-link-ficha');
+    const ctaCrear = document.getElementById('md-cta-atencion');
+    const linkCrear = document.getElementById('md-link-atencion');
+    const ctaDone = document.getElementById('md-cta-atencion-done');
+    const linkDone = document.getElementById('md-link-atencion-done');
+
+    // Link ficha clínica general — siempre visible
+    if (linkFicha && d.paciente_id) {
+      linkFicha.href = `/pacientes/${d.paciente_id}/ficha/`;
+    }
+
+    // Ocultar ambos CTAs por defecto
+    ctaCrear.style.display = 'none';
+    ctaDone.style.display = 'none';
+
+    if (d.estado === 'asistio') {
+      if (d.tiene_registro_atencion) {
+        // Ya está registrado — mostrar acceso a la ficha
+        ctaDone.style.display = '';
+        linkDone.href = `/pacientes/${d.paciente_id}/ficha/`;
+      } else {
+        // Asistió pero no tiene registro — destacar CTA para crear
+        ctaCrear.style.display = '';
+        linkCrear.href = `/pacientes/${d.paciente_id}/ficha/?nuevo_para_cita=${d.id}`;
+      }
+    }
   }
 
   function renderEstados(estadoActual) {
@@ -2248,17 +2681,25 @@
     renderMiniCalendar();
   }
 
+  // Helper: arma querystring preservando profesional/servicio si están activos
+  function buildAgendaUrl(fechaStr) {
+    const servicio = '{{ servicio_id }}';
+    const profesional = '{{ profesional_id }}';
+    let url = '?fecha=' + fechaStr;
+    if (servicio) url += '&servicio=' + servicio;
+    if (profesional) url += '&profesional=' + profesional;
+    return url;
+  }
+
   function miniCalSelectDate(dateStr) {
     miniCalState.selected = dateStr;
     renderMiniCalendar();
-    const servicio = '{{ servicio_id }}';
-    window.location.href = '?fecha=' + dateStr + '&servicio=' + servicio;
+    window.location.href = buildAgendaUrl(dateStr);
   }
 
   window.addEventListener('DOMContentLoaded', () => {
     renderMiniCalendar();
     const currentDate = '{{ fecha|date:"Y-m-d" }}';
-    const servicio = '{{ servicio_id }}';
     const topbarInput = document.getElementById('nav-date-input');
     if (topbarInput) {
       flatpickr(topbarInput, {
@@ -2269,12 +2710,65 @@
           if (selectedDates.length > 0) {
             const d = selectedDates[0];
             const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-            window.location.href = '?fecha=' + ymd + '&servicio=' + servicio;
+            window.location.href = buildAgendaUrl(ymd);
           }
         }
       });
-      const fecha = new Date(currentDate);
+      // OJO: `new Date('YYYY-MM-DD')` parsea como UTC y al formatear en zona
+      // horaria local (Chile UTC-4/UTC-3) puede retroceder al día anterior.
+      // Construimos el Date con componentes locales para evitar el shift.
+      const [_yyyy, _mm, _dd] = currentDate.split('-').map(Number);
+      const fecha = new Date(_yyyy, _mm - 1, _dd);
       topbarInput.value = fecha.toLocaleDateString('es-CL', { weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit' });
+    }
+
+    // Flatpickr para la fecha en el modal "Nueva cita".
+    // dateFormat: 'Y-m-d' → lo que se envía al backend (formato esperado por crear_cita).
+    // altInput + altFormat → display amigable para el usuario.
+    const mFechaInput = document.getElementById('m-fecha');
+    if (mFechaInput) {
+      flatpickr(mFechaInput, {
+        locale: 'es',
+        dateFormat: 'Y-m-d',
+        altInput: true,
+        altFormat: 'D j \\d\\e F, Y',
+        allowInput: false,
+        disableMobile: true,
+      });
+    }
+
+    // ─── Auto-formato RUT chileno en form de Nuevo Cliente ───────────
+    function formatearRutChileno(rut) {
+      rut = (rut || '').replace(/[^0-9kK]/g, '').toUpperCase();
+      if (rut.length === 0) return '';
+      if (rut.length === 1) return rut;
+      const cuerpo = rut.slice(0, -1);
+      const dv = rut.slice(-1);
+      return cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + dv;
+    }
+    const ncRut = document.getElementById('nc-rut');
+    if (ncRut) {
+      ncRut.addEventListener('input', e => {
+        const pos = e.target.selectionStart;
+        const antes = e.target.value.length;
+        e.target.value = formatearRutChileno(e.target.value);
+        const diff = e.target.value.length - antes;
+        e.target.setSelectionRange(pos + diff, pos + diff);
+      });
+    }
+
+    // ─── Sanity en teléfono nuevo cliente: forzar prefijo +569 ──────
+    const ncTel = document.getElementById('nc-telefono');
+    if (ncTel) {
+      ncTel.addEventListener('focus', e => {
+        if (!e.target.value) e.target.value = '+569';
+      });
+      ncTel.addEventListener('input', e => {
+        // Si el usuario borra el prefijo, lo restituimos.
+        if (!e.target.value.startsWith('+56')) {
+          e.target.value = '+569' + e.target.value.replace(/[^0-9]/g, '');
+        }
+      });
     }
 
     inicializarSidebarState();

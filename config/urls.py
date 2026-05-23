@@ -14,6 +14,25 @@ urlpatterns = [
     path('', views.dashboard, name='dashboard'),
     path('agenda/', views.agenda_view, name='agenda'),
 
+    # Pacientes
+    path('pacientes/', views.pacientes_view, name='pacientes'),
+    path('pacientes/crear/', views.crear_paciente, name='crear_paciente'),
+    path('pacientes/<int:paciente_id>/', views.paciente_detalle_view, name='paciente_detalle'),
+    path('pacientes/<int:paciente_id>/editar/', views.editar_paciente, name='editar_paciente'),
+    path('pacientes/<int:paciente_id>/toggle/', views.toggle_paciente, name='toggle_paciente'),
+    path('pacientes/<int:paciente_id>/reclasificar/', views.reclasificar_paciente, name='reclasificar_paciente'),
+
+    # Ficha clínica
+    path('pacientes/<int:paciente_id>/ficha/', views.ficha_clinica_view, name='ficha_clinica'),
+    path('pacientes/<int:paciente_id>/ficha/antecedentes/', views.guardar_antecedentes, name='guardar_antecedentes'),
+    path('pacientes/<int:paciente_id>/ficha/registro/crear/', views.crear_registro_atencion, name='crear_registro_atencion'),
+    path('ficha/registro/<int:registro_id>/editar/', views.editar_registro_atencion, name='editar_registro_atencion'),
+    path('ficha/registro/<int:registro_id>/eliminar/', views.eliminar_registro_atencion, name='eliminar_registro_atencion'),
+    path('pacientes/<int:paciente_id>/ficha/foto/subir/', views.subir_foto_evolucion, name='subir_foto_evolucion'),
+    path('ficha/foto/<int:foto_id>/', views.servir_foto_evolucion, name='servir_foto_evolucion'),
+    path('ficha/foto/<int:foto_id>/editar/', views.editar_foto_evolucion, name='editar_foto_evolucion'),
+    path('ficha/foto/<int:foto_id>/eliminar/', views.eliminar_foto_evolucion, name='eliminar_foto_evolucion'),
+
     # Citas
     path('citas/nueva/', views.crear_cita, name='crear_cita'),
     path('citas/<int:cita_id>/detalle/', views.detalle_cita, name='detalle_cita'),

@@ -1,5 +1,6 @@
 from datetime import date, datetime, timedelta
 from django.db import models
+from django.conf import settings
 from django.core.validators import RegexValidator
 from django.core.exceptions import ValidationError
 
@@ -840,3 +841,268 @@ class ComisionCalculada(models.Model):
         if self.estructura_comision:
             return self.estructura_comision.get_tipo_comision_display()
         return "Manual"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# FICHA CLÍNICA
+# Conjunto de modelos para registro clínico de pacientes:
+#   - FichaClinicaPaciente: antecedentes médicos (1 por paciente)
+#   - RegistroAtencion:     bitácora de cada atención (1 por cita atendida)
+#   - FotoEvolucion:        fotos antes/durante/después (varias por paciente)
+#   - AuditLogFicha:        log de quién accede/edita la ficha (compliance)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class FichaClinicaPaciente(models.Model):
+    """Antecedentes médicos del paciente — un registro por paciente.
+
+    Se considera información permanente que el equipo clínico debe consultar
+    antes de cualquier procedimiento. Editable por cualquier profesional
+    activo (es conocimiento compartido para evitar contraindicaciones).
+    """
+    EMBARAZO_OPCIONES = [
+        ('no_aplica', 'No aplica'),
+        ('embarazo', 'Embarazo en curso'),
+        ('lactancia', 'Lactancia'),
+        ('busca', 'Búsqueda activa'),
+    ]
+
+    paciente = models.OneToOneField(
+        Paciente, on_delete=models.CASCADE, related_name='ficha_clinica'
+    )
+
+    # Antecedentes
+    alergias = models.TextField(
+        blank=True,
+        help_text="Medicamentos, materiales, alimentos. Una por línea."
+    )
+    enfermedades_cronicas = models.TextField(
+        blank=True,
+        help_text="Hipertensión, diabetes, autoinmunes, etc."
+    )
+    medicamentos_actuales = models.TextField(
+        blank=True,
+        help_text="Lista de medicamentos en uso (anticoagulantes son críticos)."
+    )
+    cirugias_previas = models.TextField(blank=True)
+    antecedentes_esteticos = models.TextField(
+        blank=True,
+        help_text="Tratamientos previos relevantes (ácido hialurónico, bótox, láser…)"
+    )
+
+    # Situaciones especiales
+    embarazo_lactancia = models.CharField(
+        max_length=20, choices=EMBARAZO_OPCIONES, default='no_aplica'
+    )
+    contraindicaciones = models.TextField(
+        blank=True,
+        help_text="Restricciones específicas para tratamientos (resaltadas en agenda)."
+    )
+
+    # Auditoría
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+    actualizado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+'
+    )
+
+    class Meta:
+        verbose_name = "Antecedentes clínicos"
+        verbose_name_plural = "Antecedentes clínicos"
+
+    def __str__(self):
+        return f"Antecedentes — {self.paciente}"
+
+    @property
+    def tiene_contraindicaciones(self):
+        """True si hay algún flag clínico que requiera atención del profesional."""
+        return bool(
+            self.alergias.strip()
+            or self.contraindicaciones.strip()
+            or self.embarazo_lactancia in ('embarazo', 'lactancia')
+        )
+
+
+class RegistroAtencion(models.Model):
+    """Registro de UNA atención específica (típicamente una cita).
+
+    Cada profesional escribe el suyo después de atender. Visible para todo
+    el equipo activo para coordinar tratamientos cruzados.
+    """
+    paciente = models.ForeignKey(
+        Paciente, on_delete=models.CASCADE, related_name='registros_atencion'
+    )
+    cita = models.OneToOneField(
+        Cita, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='registro_atencion',
+        help_text="Cita asociada (opcional — puede haber registros sin cita formal)."
+    )
+    profesional = models.ForeignKey(
+        Profesional, on_delete=models.PROTECT, related_name='registros_atencion'
+    )
+    servicio = models.ForeignKey(
+        Servicio, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='registros_atencion',
+        help_text="Servicio del catálogo aplicado (opcional)."
+    )
+
+    fecha_atencion = models.DateField()
+
+    # Qué se hizo
+    motivo_consulta = models.TextField(
+        blank=True, help_text="Razón por la que vino el paciente."
+    )
+    procedimiento_realizado = models.TextField(
+        help_text="Detalle del procedimiento o servicio realizado."
+    )
+    productos_utilizados = models.TextField(
+        blank=True,
+        help_text="Producto, marca, lote, vencimiento, dosis. Crítico para trazabilidad."
+    )
+    aparatologia = models.TextField(
+        blank=True,
+        help_text="Equipos/máquinas utilizadas (ej: Luna Box, láser diodo). "
+                  "Los parámetros técnicos van en el campo 'parametros'."
+    )
+    zonas_tratadas = models.CharField(
+        max_length=250, blank=True,
+        help_text="Ej: frente, ojos, mentón, glabela."
+    )
+    parametros = models.TextField(
+        blank=True,
+        help_text="Energía, intensidad, número de pases, etc."
+    )
+
+    # Resultados
+    observaciones = models.TextField(
+        blank=True,
+        help_text="Cómo respondió el paciente, eventos adversos, sensibilidad."
+    )
+    indicaciones_post = models.TextField(
+        blank=True,
+        help_text="Indicaciones post-tratamiento entregadas al paciente."
+    )
+    plan_proxima_sesion = models.TextField(
+        blank=True,
+        help_text="Qué se planifica para la próxima visita."
+    )
+
+    # Auditoría
+    creado_en = models.DateTimeField(auto_now_add=True)
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='registros_creados'
+    )
+    actualizado_en = models.DateTimeField(auto_now=True)
+    actualizado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+'
+    )
+
+    class Meta:
+        verbose_name = "Registro de atención"
+        verbose_name_plural = "Registros de atención"
+        ordering = ['-fecha_atencion', '-creado_en']
+
+    def __str__(self):
+        return f"Atención {self.paciente} — {self.fecha_atencion}"
+
+
+def _ruta_foto_evolucion(instance, filename):
+    """Guarda foto en fichas_clinicas/<paciente_id>/<YYYY-MM>/<filename>."""
+    return f'fichas_clinicas/{instance.paciente_id}/{date.today():%Y-%m}/{filename}'
+
+
+class FotoEvolucion(models.Model):
+    """Foto de evolución del paciente — múltiples por paciente.
+
+    Archivos guardados en MEDIA_ROOT/fichas_clinicas/<paciente_id>/...
+    El acceso es siempre vía vista Django con auth check (NO link directo).
+    """
+    TIPOS = [
+        ('antes', 'Antes'),
+        ('durante', 'Durante'),
+        ('despues', 'Después'),
+        ('control', 'Control'),
+        ('otro', 'Otro'),
+    ]
+
+    paciente = models.ForeignKey(
+        Paciente, on_delete=models.CASCADE, related_name='fotos_evolucion'
+    )
+    registro = models.ForeignKey(
+        RegistroAtencion, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='fotos'
+    )
+
+    archivo = models.ImageField(upload_to=_ruta_foto_evolucion)
+    tipo = models.CharField(max_length=20, choices=TIPOS, default='otro')
+    zona = models.CharField(
+        max_length=100, blank=True,
+        help_text="Ej: Frente, ojos, mentón."
+    )
+    descripcion = models.TextField(blank=True)
+    fecha = models.DateField()
+
+    # Auditoría
+    subido_en = models.DateTimeField(auto_now_add=True)
+    subido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+'
+    )
+
+    class Meta:
+        verbose_name = "Foto de evolución"
+        verbose_name_plural = "Fotos de evolución"
+        ordering = ['-fecha', '-subido_en']
+
+    def __str__(self):
+        return f"Foto {self.paciente} — {self.fecha} ({self.get_tipo_display()})"
+
+
+class AuditLogFicha(models.Model):
+    """Bitácora de accesos y modificaciones a fichas clínicas.
+
+    Cumple con obligación de trazabilidad para datos sensibles (Ley 19.628 /
+    21.719). Captura quién, qué, cuándo y desde dónde.
+    """
+    ACCIONES = [
+        ('view', 'Visualización'),
+        ('antecedentes_create', 'Creación de antecedentes'),
+        ('antecedentes_update', 'Actualización de antecedentes'),
+        ('registro_create', 'Creación de registro de atención'),
+        ('registro_update', 'Actualización de registro de atención'),
+        ('registro_delete', 'Eliminación de registro de atención'),
+        ('foto_upload', 'Subida de foto'),
+        ('foto_view', 'Visualización de foto'),
+        ('foto_delete', 'Eliminación de foto'),
+    ]
+
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, related_name='acciones_ficha'
+    )
+    paciente = models.ForeignKey(
+        Paciente, on_delete=models.CASCADE, related_name='log_ficha'
+    )
+    accion = models.CharField(max_length=30, choices=ACCIONES)
+    detalle = models.CharField(
+        max_length=250, blank=True,
+        help_text="Resumen humano de la acción."
+    )
+    timestamp = models.DateTimeField(auto_now_add=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Log de ficha clínica"
+        verbose_name_plural = "Log de fichas clínicas"
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['paciente', '-timestamp']),
+            models.Index(fields=['usuario', '-timestamp']),
+        ]
+
+    def __str__(self):
+        u = self.usuario.username if self.usuario else 'sistema'
+        return f"{u} — {self.get_accion_display()} — {self.paciente}"

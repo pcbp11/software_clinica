@@ -1,0 +1,1417 @@
+{% extends "core/base.html" %}
+
+{% block title %}Ficha clínica · {{ paciente.nombres }} {{ paciente.apellidos }}{% endblock %}
+{% block page_title %}Ficha clínica{% endblock %}
+{% block page_subtitle %}{{ paciente.nombres }} {{ paciente.apellidos }} · {{ paciente.rut }}{% if paciente.edad %} · {{ paciente.edad }} años{% endif %}{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ─── Layout ────────────────────────────────────────── */
+  .ficha-wrap {
+    display: flex; flex-direction: column; gap: 18px;
+  }
+  .panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 20px;
+  }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px; padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-title {
+    font-size: 0.95rem; font-weight: 600; color: var(--text-primary);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-subtitle {
+    font-size: 0.74rem; color: var(--text-muted); margin-top: 2px;
+  }
+
+  /* ─── Alerta de contraindicaciones ──────────────────── */
+  .alert-contra {
+    background: linear-gradient(135deg, #fff4f4 0%, #ffffff 100%);
+    border: 1px solid #f3b6b6;
+    border-left: 4px solid #d9514e;
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    display: flex; align-items: flex-start; gap: 12px;
+  }
+  .alert-contra .icon {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: #fbe6e6; color: #c41c3b;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .alert-contra .title {
+    font-weight: 600; color: #9d2024; font-size: 0.92rem; margin-bottom: 4px;
+  }
+  .alert-contra .body {
+    font-size: 0.82rem; color: var(--text-primary); line-height: 1.4;
+  }
+
+  /* ─── Antecedentes form ─────────────────────────────── */
+  .ant-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  }
+  @media (max-width: 800px) { .ant-grid { grid-template-columns: 1fr; } }
+  .ant-field { display: flex; flex-direction: column; gap: 5px; }
+  .ant-field label {
+    font-size: 0.78rem; font-weight: 500; color: var(--text-primary);
+  }
+  .ant-field .hint {
+    font-size: 0.7rem; color: var(--text-muted); margin-top: -2px;
+  }
+  .ant-field textarea, .ant-field select, .ant-field input {
+    width: 100%; padding: 9px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-size: 0.86rem; font-family: inherit; color: var(--text-primary);
+    background: var(--bg-card);
+    resize: vertical; min-height: 38px;
+    box-sizing: border-box;
+  }
+  .ant-field textarea { min-height: 70px; }
+  .ant-field textarea:focus, .ant-field select:focus, .ant-field input:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(61, 132, 104, 0.1);
+  }
+
+  /* ─── Timeline de registros ─────────────────────────── */
+  .timeline { display: flex; flex-direction: column; gap: 14px; }
+  .registro-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    background: #fafaf8;
+  }
+  .registro-card.mine { border-left: 3px solid var(--accent); }
+  .reg-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; margin-bottom: 10px;
+  }
+  .reg-fecha {
+    font-weight: 600; color: var(--text-primary); font-size: 0.92rem;
+  }
+  .reg-meta {
+    font-size: 0.76rem; color: var(--text-muted); margin-top: 2px;
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  }
+  .reg-meta .dot { width: 3px; height: 3px; background: var(--text-muted); border-radius: 50%; }
+  .reg-actions { display: flex; gap: 6px; }
+  .reg-body {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 8px;
+  }
+  @media (max-width: 800px) { .reg-body { grid-template-columns: 1fr; } }
+  .reg-section { }
+  .reg-section .lbl {
+    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em;
+    text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px;
+  }
+  .reg-section .txt {
+    font-size: 0.84rem; color: var(--text-primary); line-height: 1.45;
+    white-space: pre-wrap;
+  }
+  .reg-section .txt.empty { color: var(--text-muted); font-style: italic; }
+  .reg-section.full { grid-column: 1 / -1; }
+
+  /* ─── Citas pendientes de registrar ─────────────────── */
+  .cita-pendiente {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px;
+    background: #fff8e6;
+    border: 1px solid #f1d989;
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+    gap: 12px;
+  }
+  .cita-pendiente:last-child { margin-bottom: 0; }
+  .cita-pendiente .info { font-size: 0.84rem; color: var(--text-primary); }
+  .cita-pendiente .meta { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
+
+  /* ─── Mini-galería dentro de un registro ─────────────── */
+  .reg-fotos {
+    grid-column: 1 / -1;
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+  }
+  .reg-fotos-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .reg-fotos-titulo {
+    font-size: 0.74rem; font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .reg-fotos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 8px;
+  }
+  .reg-foto-mini {
+    position: relative;
+    border-radius: 6px;
+    overflow: hidden;
+    aspect-ratio: 1 / 1;
+    background: #f0f0f0;
+    cursor: pointer;
+    border: 1px solid var(--border);
+  }
+  .reg-foto-mini img {
+    width: 100%; height: 100%; object-fit: cover;
+    display: block;
+  }
+  .reg-foto-mini .badge-tipo {
+    position: absolute; top: 4px; left: 4px;
+    background: rgba(0,0,0,0.65); color: #fff;
+    padding: 1px 6px; border-radius: 8px;
+    font-size: 0.62rem; font-weight: 600;
+    text-transform: uppercase;
+  }
+  .reg-foto-mini .controls {
+    position: absolute; top: 4px; right: 4px;
+    display: flex; gap: 4px;
+    opacity: 0; transition: opacity 0.15s;
+  }
+  .reg-foto-mini:hover .controls { opacity: 1; }
+  .reg-foto-mini .ctrl-btn {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,255,255,0.95);
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    padding: 0;
+  }
+  .reg-foto-mini .ctrl-btn:hover { background: #fff; }
+  .reg-foto-mini .ctrl-btn.danger:hover { color: #c41c3b; }
+  .btn-add-foto {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px;
+    background: transparent;
+    border: 1px dashed var(--accent);
+    color: var(--accent);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem; font-weight: 500;
+    cursor: pointer; font-family: inherit;
+  }
+  .btn-add-foto:hover { background: var(--accent-light); }
+
+  /* ─── Galería agrupada (resumen) ─────────────────────── */
+  .galeria-grupo { margin-bottom: 24px; }
+  .galeria-grupo:last-child { margin-bottom: 0; }
+  .galeria-grupo-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px;
+    background: var(--accent-light);
+    border-radius: var(--radius-sm);
+    margin-bottom: 10px;
+  }
+  .galeria-grupo-head .icon {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .galeria-grupo-titulo {
+    font-size: 0.86rem; font-weight: 600;
+    color: var(--accent-hover, #2e7d55);
+  }
+  .galeria-grupo-meta {
+    font-size: 0.74rem; color: var(--text-secondary); margin-top: 1px;
+  }
+  .galeria-grupo.sin-registro .galeria-grupo-head {
+    background: #f5f5f5;
+  }
+  .galeria-grupo.sin-registro .icon {
+    background: var(--text-muted);
+  }
+  .galeria-grupo.sin-registro .galeria-grupo-titulo {
+    color: var(--text-secondary);
+  }
+
+  /* ─── Galería de fotos ──────────────────────────────── */
+  .galeria {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .foto-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: #fff;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .foto-card:hover { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(0,0,0,0.08); }
+  .foto-card .thumb {
+    width: 100%; aspect-ratio: 1 / 1;
+    background: #f0f0f0; object-fit: cover; display: block;
+  }
+  .foto-card .meta {
+    padding: 8px 10px;
+    font-size: 0.75rem;
+    color: var(--text-primary);
+  }
+  .foto-card .meta .tipo {
+    display: inline-block;
+    padding: 2px 8px; border-radius: 10px;
+    font-size: 0.68rem; font-weight: 600;
+    background: #e0f0e8; color: #2e7d55;
+    margin-bottom: 4px;
+  }
+  .foto-card .meta .tipo.antes { background: #e1ebf8; color: #3b6fbf; }
+  .foto-card .meta .tipo.despues { background: #e0f0e8; color: #2e7d55; }
+  .foto-card .meta .tipo.durante { background: #fff4e0; color: #9d6c00; }
+  .foto-card .meta .fecha { color: var(--text-muted); font-size: 0.7rem; }
+
+  /* ─── Auditoría log ─────────────────────────────────── */
+  .audit-row {
+    display: grid; grid-template-columns: 140px 1fr 140px;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    font-size: 0.78rem;
+    align-items: center;
+  }
+  .audit-row:last-child { border-bottom: none; }
+  .audit-row .usr { color: var(--text-primary); font-weight: 500; }
+  .audit-row .act { color: var(--text-secondary); }
+  .audit-row .ts { color: var(--text-muted); font-size: 0.72rem; text-align: right; }
+
+  /* ─── Modales ───────────────────────────────────────── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4); z-index: 999;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal-content {
+    background: #fff; border-radius: 8px;
+    width: 90%; max-width: 720px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    padding: 24px;
+    max-height: 92vh; overflow-y: auto;
+  }
+  .modal-title {
+    font-size: 1.05rem; font-weight: 600; margin-bottom: 16px;
+    color: var(--text-primary);
+  }
+  .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 700px) { .form-grid-2 { grid-template-columns: 1fr; } }
+  .form-group { margin-bottom: 12px; }
+  .form-group.full { grid-column: 1 / -1; }
+  .form-group label {
+    display: block; font-size: 0.78rem; font-weight: 500;
+    margin-bottom: 5px; color: var(--text-primary);
+  }
+  .form-group input, .form-group select, .form-group textarea {
+    width: 100%; padding: 9px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-size: 0.86rem; font-family: inherit; color: var(--text-primary);
+    background: #fff; box-sizing: border-box;
+  }
+  .form-group textarea { resize: vertical; min-height: 60px; }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(61, 132, 104, 0.1);
+  }
+  .modal-buttons {
+    display: flex; gap: 12px; justify-content: flex-end; margin-top: 18px;
+  }
+  .btn-secondary {
+    background: #f0f0f0; color: var(--text-primary);
+    padding: 10px 20px; border: none; border-radius: var(--radius-sm);
+    font-weight: 500; cursor: pointer; font-size: 0.9rem; font-family: inherit;
+  }
+  .btn-danger {
+    background: transparent; border: 1px solid #d9514e; color: #c41c3b;
+    padding: 6px 12px; border-radius: var(--radius-sm);
+    font-size: 0.78rem; cursor: pointer; font-family: inherit;
+  }
+  .btn-danger:hover { background: #fbe6e6; }
+  .btn-edit-inline {
+    background: transparent; border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 6px 12px; border-radius: var(--radius-sm);
+    font-size: 0.78rem; cursor: pointer; font-family: inherit;
+  }
+  .btn-edit-inline:hover { background: var(--accent-light); }
+
+  /* ─── Select con buscador para servicios ────────────── */
+  .search-select-wrap {
+    position: relative;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: #fff;
+    overflow: hidden;
+  }
+  .search-select-wrap:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(61, 132, 104, 0.1);
+  }
+  .search-select-input {
+    width: 100%;
+    padding: 9px 12px;
+    border: none !important;
+    border-bottom: 1px solid var(--border) !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    font-size: 0.86rem;
+    background: #fafafa;
+  }
+  .search-select-input:focus {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+  .search-select-list {
+    max-height: 180px;
+    overflow-y: auto;
+    background: #fff;
+  }
+  .search-select-list .opt {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    color: var(--text-primary);
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .search-select-list .opt:hover,
+  .search-select-list .opt.highlight {
+    background: var(--accent-light, #e8f4ee);
+  }
+  .search-select-list .opt.selected {
+    background: var(--accent);
+    color: #fff;
+  }
+  .search-select-list .opt .unidad {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+  .search-select-list .opt.selected .unidad { color: rgba(255,255,255,0.85); }
+  .search-select-empty {
+    padding: 14px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+  }
+  .search-select-selected {
+    padding: 8px 12px;
+    background: var(--accent-light, #e8f4ee);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.82rem;
+    color: var(--accent-hover, #2e7d55);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .search-select-selected .clear-x {
+    background: transparent;
+    border: none;
+    color: var(--accent-hover, #2e7d55);
+    cursor: pointer;
+    font-size: 1.1rem;
+    padding: 0;
+    line-height: 1;
+  }
+
+  /* ─── Lightbox de fotos ─────────────────────────────── */
+  .lightbox-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.85); z-index: 1100;
+    align-items: center; justify-content: center;
+    padding: 30px;
+  }
+  .lightbox-overlay.active { display: flex; }
+  .lightbox-img { max-width: 100%; max-height: 90vh; object-fit: contain; }
+  .lightbox-close {
+    position: absolute; top: 20px; right: 24px;
+    background: rgba(255,255,255,0.15);
+    border: none; color: #fff;
+    width: 40px; height: 40px;
+    border-radius: 50%; cursor: pointer; font-size: 1.4rem;
+  }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'paciente_detalle' paciente.id %}" class="btn btn-ghost" style="font-size:0.82rem; padding:7px 14px;">
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+  Volver a la ficha del paciente
+</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="ficha-wrap">
+
+  {# ── Alerta de contraindicaciones ── #}
+  {% if antecedentes.tiene_contraindicaciones %}
+  <div class="alert-contra">
+    <div class="icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+    </div>
+    <div style="flex:1;">
+      <div class="title">⚠️ Antecedentes a considerar antes de cualquier procedimiento</div>
+      <div class="body">
+        {% if antecedentes.embarazo_lactancia == 'embarazo' %}<strong>Embarazo en curso.</strong> {% endif %}
+        {% if antecedentes.embarazo_lactancia == 'lactancia' %}<strong>Lactancia.</strong> {% endif %}
+        {% if antecedentes.alergias %}<strong>Alergias:</strong> {{ antecedentes.alergias|linebreaksbr }}<br>{% endif %}
+        {% if antecedentes.contraindicaciones %}<strong>Restricciones:</strong> {{ antecedentes.contraindicaciones|linebreaksbr }}{% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Antecedentes médicos ── #}
+  <div class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16l4-2 4 2 4-2 2 2z"/></svg>
+          Antecedentes médicos
+        </div>
+        <div class="panel-subtitle">
+          {% if antecedentes.actualizado_en %}Última actualización: {{ antecedentes.actualizado_en|date:"d/m/Y H:i" }}{% if antecedentes.actualizado_por %} por {{ antecedentes.actualizado_por.get_username }}{% endif %}{% else %}Sin completar todavía{% endif %}
+        </div>
+      </div>
+      <button class="btn-edit-inline" onclick="toggleAntecedentes()">
+        <span id="ant-btn-txt">Editar</span>
+      </button>
+    </div>
+
+    {# Vista lectura (default) #}
+    <div id="ant-vista">
+      <div class="ant-grid">
+        <div>
+          <div class="reg-section">
+            <div class="lbl">Alergias</div>
+            <div class="txt {% if not antecedentes.alergias %}empty{% endif %}">{{ antecedentes.alergias|default:"— sin registrar —"|linebreaksbr }}</div>
+          </div>
+          <div class="reg-section" style="margin-top:12px;">
+            <div class="lbl">Medicamentos actuales</div>
+            <div class="txt {% if not antecedentes.medicamentos_actuales %}empty{% endif %}">{{ antecedentes.medicamentos_actuales|default:"— sin registrar —"|linebreaksbr }}</div>
+          </div>
+          <div class="reg-section" style="margin-top:12px;">
+            <div class="lbl">Enfermedades crónicas</div>
+            <div class="txt {% if not antecedentes.enfermedades_cronicas %}empty{% endif %}">{{ antecedentes.enfermedades_cronicas|default:"— sin registrar —"|linebreaksbr }}</div>
+          </div>
+        </div>
+        <div>
+          <div class="reg-section">
+            <div class="lbl">Cirugías previas</div>
+            <div class="txt {% if not antecedentes.cirugias_previas %}empty{% endif %}">{{ antecedentes.cirugias_previas|default:"— sin registrar —"|linebreaksbr }}</div>
+          </div>
+          <div class="reg-section" style="margin-top:12px;">
+            <div class="lbl">Antecedentes estéticos</div>
+            <div class="txt {% if not antecedentes.antecedentes_esteticos %}empty{% endif %}">{{ antecedentes.antecedentes_esteticos|default:"— sin registrar —"|linebreaksbr }}</div>
+          </div>
+          <div class="reg-section" style="margin-top:12px;">
+            <div class="lbl">Embarazo / Lactancia</div>
+            <div class="txt">{{ antecedentes.get_embarazo_lactancia_display }}</div>
+          </div>
+        </div>
+        <div style="grid-column:1/-1;">
+          <div class="reg-section">
+            <div class="lbl">Contraindicaciones / Restricciones</div>
+            <div class="txt {% if not antecedentes.contraindicaciones %}empty{% endif %}">{{ antecedentes.contraindicaciones|default:"— sin registrar —"|linebreaksbr }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# Vista edición #}
+    <form method="post" action="{% url 'guardar_antecedentes' paciente.id %}" id="ant-form" style="display:none;">
+      {% csrf_token %}
+      <div class="ant-grid">
+        <div class="ant-field">
+          <label>Alergias</label>
+          <div class="hint">Una por línea (medicamentos, materiales, alimentos)</div>
+          <textarea name="alergias" rows="3">{{ antecedentes.alergias }}</textarea>
+        </div>
+        <div class="ant-field">
+          <label>Medicamentos actuales</label>
+          <div class="hint">⚠️ Anticoagulantes son críticos</div>
+          <textarea name="medicamentos_actuales" rows="3">{{ antecedentes.medicamentos_actuales }}</textarea>
+        </div>
+        <div class="ant-field">
+          <label>Enfermedades crónicas</label>
+          <textarea name="enfermedades_cronicas" rows="3">{{ antecedentes.enfermedades_cronicas }}</textarea>
+        </div>
+        <div class="ant-field">
+          <label>Cirugías previas</label>
+          <textarea name="cirugias_previas" rows="3">{{ antecedentes.cirugias_previas }}</textarea>
+        </div>
+        <div class="ant-field">
+          <label>Antecedentes estéticos</label>
+          <div class="hint">Tratamientos previos relevantes</div>
+          <textarea name="antecedentes_esteticos" rows="3">{{ antecedentes.antecedentes_esteticos }}</textarea>
+        </div>
+        <div class="ant-field">
+          <label>Embarazo / Lactancia</label>
+          <select name="embarazo_lactancia">
+            {% for val, lbl in embarazo_opciones %}
+            <option value="{{ val }}" {% if antecedentes.embarazo_lactancia == val %}selected{% endif %}>{{ lbl }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="ant-field" style="grid-column:1/-1;">
+          <label>Contraindicaciones / Restricciones</label>
+          <div class="hint">Aparecerá como alerta destacada en la ficha</div>
+          <textarea name="contraindicaciones" rows="2">{{ antecedentes.contraindicaciones }}</textarea>
+        </div>
+      </div>
+      <div class="modal-buttons">
+        <button type="button" class="btn-secondary" onclick="toggleAntecedentes()">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar antecedentes</button>
+      </div>
+    </form>
+  </div>
+
+  {# ── Citas asistidas sin registro (sugerir crear) ── #}
+  {% if citas_sin_registro %}
+  <div class="panel" style="background: linear-gradient(135deg, #fff8e6 0%, #ffffff 100%); border-color: #f1d989;">
+    <div class="panel-head" style="border-color:#f1d989;">
+      <div>
+        <div class="panel-title" style="color:#8d6c1d;">
+          📋 Citas atendidas sin registro de atención
+        </div>
+        <div class="panel-subtitle">Estas citas marcadas como "asistió" aún no tienen ficha clínica registrada.</div>
+      </div>
+    </div>
+    {% for c in citas_sin_registro %}
+    <div class="cita-pendiente">
+      <div>
+        <div class="info"><strong>{{ c.fecha|date:"d/m/Y" }}</strong> · {{ c.servicio.nombre }}</div>
+        <div class="meta">{{ c.hora_inicio|time:"H:i" }} · Atendió: {{ c.profesional.nombres }} {{ c.profesional.apellidos }}</div>
+      </div>
+      <button class="btn btn-primary" style="font-size:0.78rem; padding:6px 12px;"
+              onclick="abrirRegistroCita({{ c.id }}, '{{ c.fecha|date:'Y-m-d' }}', {{ c.profesional.id }}, '{{ c.servicio.nombre|escapejs }}', {{ c.servicio.id }}, '{{ c.servicio.unidad_negocio.nombre|escapejs }}')">
+        + Registrar atención
+      </button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# ── Registros de atención (timeline) ── #}
+  <div class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Registros de atención
+        </div>
+        <div class="panel-subtitle">{{ registros|length }} registro{{ registros|length|pluralize }}</div>
+      </div>
+      <button class="btn btn-primary" style="font-size:0.85rem; padding:8px 16px;" onclick="abrirRegistroLibre()">
+        + Nuevo registro
+      </button>
+    </div>
+
+    {% if registros %}
+    <div class="timeline">
+      {% for r in registros %}
+      <div class="registro-card {% if r.creado_por_id == request.user.id %}mine{% endif %}">
+        <div class="reg-head">
+          <div>
+            <div class="reg-fecha">
+              {{ r.fecha_atencion|date:"l j \d\e F, Y" }}
+              {% if r.servicio %}
+              <span style="display:inline-block; margin-left:8px; padding:2px 9px; border-radius:10px; background:var(--accent-light); color:var(--accent); font-size:0.72rem; font-weight:600;">{{ r.servicio.nombre }}</span>
+              {% endif %}
+            </div>
+            <div class="reg-meta">
+              <span>{{ r.profesional.nombres }} {{ r.profesional.apellidos }}</span>
+              {% if r.cita %}
+              <span class="dot"></span>
+              <span>📅 Cita {{ r.cita.fecha|date:"d/m" }}</span>
+              {% endif %}
+              {% if r.zonas_tratadas %}
+              <span class="dot"></span>
+              <span>📍 {{ r.zonas_tratadas }}</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="reg-actions">
+            {% if request.user.is_staff or r.creado_por_id == request.user.id %}
+            <button class="btn-edit-inline"
+                    data-registro-id="{{ r.id }}"
+                    data-fecha="{{ r.fecha_atencion|date:'Y-m-d' }}"
+                    data-prof-id="{{ r.profesional_id }}"
+                    data-cita-id="{{ r.cita_id|default:'' }}"
+                    data-servicio-id="{{ r.servicio_id|default:'' }}"
+                    data-motivo="{{ r.motivo_consulta|escape }}"
+                    data-procedimiento="{{ r.procedimiento_realizado|escape }}"
+                    data-productos="{{ r.productos_utilizados|escape }}"
+                    data-aparatologia="{{ r.aparatologia|escape }}"
+                    data-parametros="{{ r.parametros|escape }}"
+                    data-zonas="{{ r.zonas_tratadas|escape }}"
+                    data-obs="{{ r.observaciones|escape }}"
+                    data-indicaciones="{{ r.indicaciones_post|escape }}"
+                    data-plan="{{ r.plan_proxima_sesion|escape }}"
+                    onclick="editarRegistroFromBtn(this)">Editar</button>
+            <form method="post" action="{% url 'eliminar_registro_atencion' r.id %}" style="display:inline;" onsubmit="return confirm('¿Eliminar este registro? Esta acción queda en el log de auditoría.');">
+              {% csrf_token %}
+              <button type="submit" class="btn-danger">Eliminar</button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="reg-body">
+          {% if r.motivo_consulta %}
+          <div class="reg-section full">
+            <div class="lbl">Motivo de consulta</div>
+            <div class="txt">{{ r.motivo_consulta }}</div>
+          </div>
+          {% endif %}
+
+          <div class="reg-section">
+            <div class="lbl">Procedimiento realizado</div>
+            <div class="txt">{{ r.procedimiento_realizado }}</div>
+          </div>
+
+          {% if r.productos_utilizados %}
+          <div class="reg-section">
+            <div class="lbl">Productos / Dosis / Lote</div>
+            <div class="txt">{{ r.productos_utilizados }}</div>
+          </div>
+          {% endif %}
+
+          {% if r.aparatologia %}
+          <div class="reg-section">
+            <div class="lbl">⚙️ Aparatología utilizada</div>
+            <div class="txt">{{ r.aparatologia }}</div>
+          </div>
+          {% endif %}
+
+          {% if r.parametros %}
+          <div class="reg-section">
+            <div class="lbl">Parámetros técnicos</div>
+            <div class="txt">{{ r.parametros }}</div>
+          </div>
+          {% endif %}
+
+          {% if r.observaciones %}
+          <div class="reg-section">
+            <div class="lbl">Observaciones</div>
+            <div class="txt">{{ r.observaciones }}</div>
+          </div>
+          {% endif %}
+
+          {% if r.indicaciones_post %}
+          <div class="reg-section full">
+            <div class="lbl">Indicaciones post-tratamiento</div>
+            <div class="txt">{{ r.indicaciones_post }}</div>
+          </div>
+          {% endif %}
+
+          {% if r.plan_proxima_sesion %}
+          <div class="reg-section full">
+            <div class="lbl">Plan próxima sesión</div>
+            <div class="txt">{{ r.plan_proxima_sesion }}</div>
+          </div>
+          {% endif %}
+
+          {# ── Mini-galería de la sesión ── #}
+          <div class="reg-fotos">
+            <div class="reg-fotos-head">
+              <div class="reg-fotos-titulo">
+                📷 Fotos de esta sesión
+                {% if r.fotos_lista %}<span style="color:var(--text-muted); font-weight:400;">({{ r.fotos_lista|length }})</span>{% endif %}
+              </div>
+              <button type="button" class="btn-add-foto" onclick="abrirSubirFoto({{ r.id }})">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Agregar foto
+              </button>
+            </div>
+            {% if r.fotos_lista %}
+            <div class="reg-fotos-grid">
+              {% for f in r.fotos_lista %}
+              <div class="reg-foto-mini">
+                <img src="{% url 'servir_foto_evolucion' f.id %}"
+                     alt="{{ f.get_tipo_display }}"
+                     onclick="abrirLightbox('{% url 'servir_foto_evolucion' f.id %}')">
+                <span class="badge-tipo">{{ f.get_tipo_display }}</span>
+                {% if request.user.is_staff or f.subido_por_id == request.user.id %}
+                <div class="controls">
+                  <button type="button" class="ctrl-btn"
+                          title="Editar foto"
+                          data-foto-id="{{ f.id }}"
+                          data-tipo="{{ f.tipo }}"
+                          data-fecha="{{ f.fecha|date:'Y-m-d' }}"
+                          data-zona="{{ f.zona|escape }}"
+                          data-descripcion="{{ f.descripcion|escape }}"
+                          data-registro-id="{{ f.registro_id|default:'' }}"
+                          onclick="event.stopPropagation(); abrirEditarFoto(this)">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                  </button>
+                  <form method="post" action="{% url 'eliminar_foto_evolucion' f.id %}" style="display:inline;" onsubmit="return confirm('¿Eliminar esta foto? Queda en el log de auditoría.');" onclick="event.stopPropagation();">
+                    {% csrf_token %}
+                    <button type="submit" class="ctrl-btn danger" title="Eliminar foto">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
+                  </form>
+                </div>
+                {% endif %}
+              </div>
+              {% endfor %}
+            </div>
+            {% else %}
+            <div style="padding:12px; text-align:center; color:var(--text-muted); font-size:0.78rem; font-style:italic;">
+              Sin fotos en esta sesión todavía
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="padding:40px 16px; text-align:center; color:var(--text-muted); font-size:0.88rem;">
+      Aún no hay registros de atención.
+      {% if citas_sin_registro %}<br>Comienza creando uno desde las citas pendientes arriba.{% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── Galería de evolución (vista resumen agrupada por sesión) ── #}
+  <div class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          Galería de evolución — Resumen
+        </div>
+        <div class="panel-subtitle">{{ fotos|length }} foto{{ fotos|length|pluralize }} · agrupadas por sesión</div>
+      </div>
+      <button class="btn btn-primary" style="font-size:0.85rem; padding:8px 16px;" onclick="abrirSubirFoto()">
+        + Subir foto suelta
+      </button>
+    </div>
+
+    {% if fotos %}
+      {# Iterar sobre registros y mostrar sus fotos como grupos #}
+      {% for r in registros %}
+        {% if r.fotos_lista %}
+        <div class="galeria-grupo">
+          <div class="galeria-grupo-head">
+            <div class="icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+            </div>
+            <div>
+              <div class="galeria-grupo-titulo">
+                {{ r.fecha_atencion|date:"l j \d\e F, Y" }}
+                {% if r.servicio %} · {{ r.servicio.nombre }}{% endif %}
+              </div>
+              <div class="galeria-grupo-meta">
+                Atendió: {{ r.profesional.nombres }} {{ r.profesional.apellidos }} ·
+                {{ r.fotos_lista|length }} foto{{ r.fotos_lista|length|pluralize }}
+              </div>
+            </div>
+          </div>
+          <div class="galeria">
+            {% for f in r.fotos_lista %}
+            <div class="foto-card">
+              <img src="{% url 'servir_foto_evolucion' f.id %}"
+                   alt="{{ f.get_tipo_display }} {{ f.fecha|date:'d/m/Y' }}"
+                   class="thumb"
+                   onclick="abrirLightbox('{% url 'servir_foto_evolucion' f.id %}')">
+              <div class="meta">
+                <div class="tipo {{ f.tipo }}">{{ f.get_tipo_display }}</div>
+                {% if f.zona %}<div style="font-weight:500;">{{ f.zona }}</div>{% endif %}
+                <div class="fecha">{{ f.fecha|date:"d/m/Y" }}</div>
+                {% if request.user.is_staff or f.subido_por_id == request.user.id %}
+                <div style="display:flex; gap:4px; margin-top:6px;">
+                  <button type="button" class="btn-edit-inline" style="flex:1; font-size:0.68rem; padding:3px 6px;"
+                          data-foto-id="{{ f.id }}"
+                          data-tipo="{{ f.tipo }}"
+                          data-fecha="{{ f.fecha|date:'Y-m-d' }}"
+                          data-zona="{{ f.zona|escape }}"
+                          data-descripcion="{{ f.descripcion|escape }}"
+                          data-registro-id="{{ f.registro_id|default:'' }}"
+                          onclick="abrirEditarFoto(this)">Editar</button>
+                  <form method="post" action="{% url 'eliminar_foto_evolucion' f.id %}" style="flex:1;" onsubmit="return confirm('¿Eliminar esta foto?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-danger" style="width:100%; font-size:0.68rem; padding:3px 6px;">Eliminar</button>
+                  </form>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      {% endfor %}
+
+      {# Fotos sin registro asociado #}
+      {% if fotos_sin_registro %}
+      <div class="galeria-grupo sin-registro">
+        <div class="galeria-grupo-head">
+          <div class="icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <div>
+            <div class="galeria-grupo-titulo">Fotos sin sesión asociada</div>
+            <div class="galeria-grupo-meta">
+              {{ fotos_sin_registro|length }} foto{{ fotos_sin_registro|length|pluralize }} — pueden vincularse a un registro desde Editar
+            </div>
+          </div>
+        </div>
+        <div class="galeria">
+          {% for f in fotos_sin_registro %}
+          <div class="foto-card">
+            <img src="{% url 'servir_foto_evolucion' f.id %}"
+                 alt="{{ f.get_tipo_display }}"
+                 class="thumb"
+                 onclick="abrirLightbox('{% url 'servir_foto_evolucion' f.id %}')">
+            <div class="meta">
+              <div class="tipo {{ f.tipo }}">{{ f.get_tipo_display }}</div>
+              {% if f.zona %}<div style="font-weight:500;">{{ f.zona }}</div>{% endif %}
+              <div class="fecha">{{ f.fecha|date:"d/m/Y" }}</div>
+              {% if request.user.is_staff or f.subido_por_id == request.user.id %}
+              <div style="display:flex; gap:4px; margin-top:6px;">
+                <button type="button" class="btn-edit-inline" style="flex:1; font-size:0.68rem; padding:3px 6px;"
+                        data-foto-id="{{ f.id }}"
+                        data-tipo="{{ f.tipo }}"
+                        data-fecha="{{ f.fecha|date:'Y-m-d' }}"
+                        data-zona="{{ f.zona|escape }}"
+                        data-descripcion="{{ f.descripcion|escape }}"
+                        data-registro-id=""
+                        onclick="abrirEditarFoto(this)">Editar</button>
+                <form method="post" action="{% url 'eliminar_foto_evolucion' f.id %}" style="flex:1;" onsubmit="return confirm('¿Eliminar esta foto?');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn-danger" style="width:100%; font-size:0.68rem; padding:3px 6px;">Eliminar</button>
+                </form>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    {% else %}
+    <div style="padding:40px 16px; text-align:center; color:var(--text-muted); font-size:0.88rem;">
+      Aún no hay fotos. Sube fotos desde cada registro de atención arriba ↑<br>
+      <span style="font-size:0.78rem;">Formatos: JPG, PNG, WEBP, HEIC · máx 10 MB</span>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── Log de auditoría (compliance) ── #}
+  {% if auditoria_reciente %}
+  <details class="panel" style="padding:14px 20px;">
+    <summary style="cursor:pointer; font-size:0.86rem; font-weight:600; color:var(--text-secondary);">
+      🔒 Registro de auditoría (últimos {{ auditoria_reciente|length }} accesos)
+    </summary>
+    <div style="margin-top:12px;">
+      {% for a in auditoria_reciente %}
+      <div class="audit-row">
+        <div class="usr">{{ a.usuario.username|default:"sistema" }}</div>
+        <div class="act">{{ a.get_accion_display }}{% if a.detalle %} — {{ a.detalle }}{% endif %}</div>
+        <div class="ts">{{ a.timestamp|date:"d/m/Y H:i" }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
+
+</div>
+
+
+{# ═══════════ MODAL: Nuevo / Editar registro de atención ═══════════ #}
+<div id="modal-registro" class="modal-overlay" onclick="if(event.target===this)cerrarRegistro()">
+  <div class="modal-content">
+    <div class="modal-title" id="modal-registro-title">Nuevo registro de atención</div>
+    <form method="post" id="form-registro">
+      {% csrf_token %}
+      <input type="hidden" name="cita" id="r-cita">
+      <input type="hidden" name="_action" id="r-action" value="crear">
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>Fecha de atención <span style="color:#c41c3b;">*</span></label>
+          <input type="date" name="fecha_atencion" id="r-fecha" required>
+        </div>
+        <div class="form-group">
+          <label>Profesional <span style="color:#c41c3b;">*</span></label>
+          <select name="profesional" id="r-prof" required>
+            <option value="">— Selecciona —</option>
+            {% for prof in profesionales_activos %}
+            <option value="{{ prof.id }}">{{ prof.nombres }} {{ prof.apellidos }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Motivo de consulta</label>
+        <textarea name="motivo_consulta" id="r-motivo" rows="2"></textarea>
+      </div>
+
+      {# Servicio: select buscable #}
+      <div class="form-group">
+        <label>Servicio realizado <span style="color:var(--text-muted); font-weight:400; font-size:0.74rem;">(buscar y seleccionar)</span></label>
+        <input type="hidden" name="servicio" id="r-servicio-id" value="">
+        <div class="search-select-wrap">
+          <div id="r-servicio-selected" class="search-select-selected" style="display:none;">
+            <span>
+              <strong id="r-servicio-selected-nombre"></strong>
+              <span class="unidad" id="r-servicio-selected-unidad"></span>
+            </span>
+            <button type="button" class="clear-x" onclick="limpiarServicio()" title="Quitar selección">×</button>
+          </div>
+          <input type="text" id="r-servicio-search" class="search-select-input"
+                 placeholder="Empieza a escribir el nombre del servicio…"
+                 autocomplete="off"
+                 oninput="filtrarServicios(this.value)"
+                 onfocus="mostrarListaServicios()">
+          <div class="search-select-list" id="r-servicio-list"></div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Detalle del procedimiento realizado <span style="color:#c41c3b;">*</span></label>
+        <textarea name="procedimiento_realizado" id="r-procedimiento" rows="3" required
+                  placeholder="Describe específicamente qué se hizo durante esta atención…"></textarea>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>Productos utilizados</label>
+          <textarea name="productos_utilizados" id="r-productos" rows="3" placeholder="Producto, marca, lote, vencimiento, dosis…"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Aparatología utilizada</label>
+          <textarea name="aparatologia" id="r-aparatologia" rows="3" placeholder="Ej: Luna Box, láser diodo, radiofrecuencia…"></textarea>
+        </div>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>Parámetros técnicos</label>
+          <textarea name="parametros" id="r-parametros" rows="2" placeholder="Energía, intensidad, fluencia, n° de pases, frecuencia…"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Zonas tratadas</label>
+          <input type="text" name="zonas_tratadas" id="r-zonas" placeholder="Ej: frente, ojos, mentón, axilas">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Observaciones</label>
+        <textarea name="observaciones" id="r-obs" rows="2" placeholder="Respuesta del paciente, eventos adversos…"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Indicaciones post-tratamiento</label>
+        <textarea name="indicaciones_post" id="r-indicaciones" rows="2"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Plan próxima sesión</label>
+        <textarea name="plan_proxima_sesion" id="r-plan" rows="2"></textarea>
+      </div>
+
+      <div class="modal-buttons">
+        <button type="button" class="btn-secondary" onclick="cerrarRegistro()">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar registro</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+{# ═══════════ MODAL: Subir foto ═══════════ #}
+<div id="modal-foto" class="modal-overlay" onclick="if(event.target===this)cerrarFoto()">
+  <div class="modal-content" style="max-width:540px;">
+    <div class="modal-title" id="modal-foto-title">Subir foto de evolución</div>
+    <div id="modal-foto-context" style="display:none; padding:10px 12px; background:var(--accent-light); border-radius:var(--radius-sm); margin-bottom:14px; font-size:0.82rem; color:var(--accent-hover, #2e7d55);"></div>
+    <form method="post" action="{% url 'subir_foto_evolucion' paciente.id %}" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="registro" id="foto-registro" value="">
+
+      <div class="form-group">
+        <label>Imagen <span style="color:#c41c3b;">*</span></label>
+        <input type="file" name="archivo" accept="image/*" required>
+        <div style="font-size:0.72rem; color:var(--text-muted); margin-top:3px;">
+          JPG / PNG / WEBP / HEIC · máx 10 MB
+        </div>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>Tipo</label>
+          <select name="tipo">
+            {% for val, lbl in tipos_foto %}
+            <option value="{{ val }}">{{ lbl }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Fecha</label>
+          <input type="date" name="fecha" id="foto-fecha">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Zona</label>
+        <input type="text" name="zona" placeholder="Ej: Frente, ojos, mentón">
+      </div>
+
+      <div class="form-group">
+        <label>Descripción (opcional)</label>
+        <textarea name="descripcion" rows="2"></textarea>
+      </div>
+
+      <div class="modal-buttons">
+        <button type="button" class="btn-secondary" onclick="cerrarFoto()">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Subir foto</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+{# ═══════════ MODAL: Editar foto ═══════════ #}
+<div id="modal-foto-edit" class="modal-overlay" onclick="if(event.target===this)cerrarEditarFoto()">
+  <div class="modal-content" style="max-width:540px;">
+    <div class="modal-title">Editar foto</div>
+    <form method="post" id="form-foto-edit" enctype="multipart/form-data">
+      {% csrf_token %}
+
+      <div class="form-group">
+        <label>Reemplazar imagen <span style="color:var(--text-muted); font-weight:400; font-size:0.74rem;">(opcional)</span></label>
+        <input type="file" name="archivo" accept="image/*">
+        <div style="font-size:0.72rem; color:var(--text-muted); margin-top:3px;">
+          Deja vacío si solo quieres editar los datos. Para reemplazar la imagen, selecciona una nueva (máx 10 MB).
+        </div>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>Tipo</label>
+          <select name="tipo" id="fe-tipo">
+            {% for val, lbl in tipos_foto %}
+            <option value="{{ val }}">{{ lbl }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Fecha</label>
+          <input type="date" name="fecha" id="fe-fecha">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Zona</label>
+        <input type="text" name="zona" id="fe-zona" placeholder="Ej: Frente, ojos, mentón">
+      </div>
+
+      <div class="form-group">
+        <label>Sesión asociada</label>
+        <select name="registro" id="fe-registro">
+          <option value="">— Sin sesión asociada —</option>
+          {% for r in registros %}
+          <option value="{{ r.id }}">{{ r.fecha_atencion|date:"d/m/Y" }} · {% if r.servicio %}{{ r.servicio.nombre }} · {% endif %}{{ r.profesional.nombres }} {{ r.profesional.apellidos }}</option>
+          {% endfor %}
+        </select>
+        {% if not registros %}
+        <div style="margin-top:6px; padding:8px 10px; background:#fff8e6; border:1px solid #f1d989; border-radius:var(--radius-sm); font-size:0.74rem; color:#8d6c1d;">
+          ⚠️ Este paciente aún no tiene registros de atención.
+          <button type="button" style="background:transparent; border:none; color:#c4870c; font-weight:600; cursor:pointer; padding:0; text-decoration:underline; font-size:0.74rem;"
+                  onclick="cerrarEditarFoto(); abrirRegistroLibre();">
+            Crea un registro primero
+          </button>
+          y después vuelve a editar esta foto.
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="form-group">
+        <label>Descripción</label>
+        <textarea name="descripcion" id="fe-descripcion" rows="2"></textarea>
+      </div>
+
+      <div class="modal-buttons">
+        <button type="button" class="btn-secondary" onclick="cerrarEditarFoto()">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar cambios</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+{# ═══════════ LIGHTBOX ═══════════ #}
+<div id="lightbox" class="lightbox-overlay" onclick="cerrarLightbox()">
+  <button class="lightbox-close" onclick="cerrarLightbox()">×</button>
+  <img class="lightbox-img" id="lightbox-img" src="" alt="">
+</div>
+
+
+{{ servicios_json|json_script:"servicios-data" }}
+{% if nueva_cita_data %}
+{{ nueva_cita_data|json_script:"nueva-cita-data" }}
+{% endif %}
+
+<script>
+  /* ─── Antecedentes — toggle vista / form ─── */
+  function toggleAntecedentes() {
+    const vista = document.getElementById('ant-vista');
+    const form = document.getElementById('ant-form');
+    const btn = document.getElementById('ant-btn-txt');
+    const editando = form.style.display !== 'none';
+    if (editando) {
+      vista.style.display = '';
+      form.style.display = 'none';
+      btn.textContent = 'Editar';
+    } else {
+      vista.style.display = 'none';
+      form.style.display = '';
+      btn.textContent = 'Cancelar';
+    }
+  }
+
+  /* ─── Catálogo de servicios para el buscador (vía json_script — escape seguro) ─── */
+  const SERVICIOS = JSON.parse(document.getElementById('servicios-data').textContent || '[]');
+
+  function escapeHtml(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function renderListaServicios(filtro = '') {
+    const cont = document.getElementById('r-servicio-list');
+    const q = (filtro || '').toLowerCase().trim();
+    const filtrados = q
+      ? SERVICIOS.filter(s => s.nombre.toLowerCase().includes(q) || s.unidad.toLowerCase().includes(q))
+      : SERVICIOS;
+    if (filtrados.length === 0) {
+      cont.innerHTML = '<div class="search-select-empty">Sin coincidencias</div>';
+      return;
+    }
+    // Construir DOM con listeners en lugar de inline onclick (evita problemas con quotes)
+    cont.innerHTML = '';
+    filtrados.slice(0, 20).forEach(s => {
+      const div = document.createElement('div');
+      div.className = 'opt';
+      div.innerHTML = `<span>${escapeHtml(s.nombre)}</span><span class="unidad">${escapeHtml(s.unidad)}</span>`;
+      div.addEventListener('click', () => seleccionarServicio(s.id, s.nombre, s.unidad));
+      cont.appendChild(div);
+    });
+    if (filtrados.length > 20) {
+      const more = document.createElement('div');
+      more.className = 'search-select-empty';
+      more.textContent = `+ ${filtrados.length - 20} resultados más — refina la búsqueda`;
+      cont.appendChild(more);
+    }
+  }
+
+  function filtrarServicios(valor) {
+    renderListaServicios(valor);
+    document.getElementById('r-servicio-list').style.display = '';
+  }
+
+  function mostrarListaServicios() {
+    renderListaServicios(document.getElementById('r-servicio-search').value);
+    document.getElementById('r-servicio-list').style.display = '';
+  }
+
+  function seleccionarServicio(id, nombre, unidad) {
+    document.getElementById('r-servicio-id').value = id;
+    document.getElementById('r-servicio-selected-nombre').textContent = nombre;
+    document.getElementById('r-servicio-selected-unidad').textContent = unidad ? '· ' + unidad : '';
+    document.getElementById('r-servicio-selected').style.display = '';
+    document.getElementById('r-servicio-search').style.display = 'none';
+    document.getElementById('r-servicio-list').style.display = 'none';
+    // Si el campo procedimiento está vacío, sugerir el nombre del servicio como punto de partida
+    const proc = document.getElementById('r-procedimiento');
+    if (!proc.value.trim()) proc.value = nombre + ' — ';
+  }
+
+  function limpiarServicio() {
+    document.getElementById('r-servicio-id').value = '';
+    document.getElementById('r-servicio-selected').style.display = 'none';
+    document.getElementById('r-servicio-search').style.display = '';
+    document.getElementById('r-servicio-search').value = '';
+    document.getElementById('r-servicio-search').focus();
+    renderListaServicios();
+  }
+
+  /* ─── Modal Registro ─── */
+  const HOY = new Date().toISOString().slice(0, 10);
+
+  function resetServicioSelect() {
+    document.getElementById('r-servicio-id').value = '';
+    document.getElementById('r-servicio-selected').style.display = 'none';
+    document.getElementById('r-servicio-search').style.display = '';
+    document.getElementById('r-servicio-search').value = '';
+    document.getElementById('r-servicio-list').innerHTML = '';
+    document.getElementById('r-servicio-list').style.display = 'none';
+  }
+
+  function abrirRegistroLibre() {
+    const form = document.getElementById('form-registro');
+    form.reset();
+    form.action = '{% url "crear_registro_atencion" paciente.id %}';
+    document.getElementById('modal-registro-title').textContent = 'Nuevo registro de atención';
+    document.getElementById('r-fecha').value = HOY;
+    document.getElementById('r-cita').value = '';
+    resetServicioSelect();
+    document.getElementById('modal-registro').classList.add('active');
+  }
+
+  function abrirRegistroCita(citaId, fecha, profId, servicio, servicioId, unidad) {
+    const form = document.getElementById('form-registro');
+    form.reset();
+    form.action = '{% url "crear_registro_atencion" paciente.id %}';
+    document.getElementById('modal-registro-title').textContent = 'Registro para cita del ' + fecha;
+    document.getElementById('r-fecha').value = fecha;
+    document.getElementById('r-prof').value = profId;
+    document.getElementById('r-cita').value = citaId;
+    document.getElementById('r-motivo').value = '';
+    resetServicioSelect();
+    if (servicioId) {
+      seleccionarServicio(servicioId, servicio || '', unidad || '');
+    } else if (servicio) {
+      document.getElementById('r-procedimiento').value = servicio + ' — ';
+    }
+    document.getElementById('modal-registro').classList.add('active');
+  }
+
+  function editarRegistroFromBtn(btn) {
+    const d = btn.dataset;
+    const form = document.getElementById('form-registro');
+    form.reset();
+    form.action = '/ficha/registro/' + d.registroId + '/editar/';
+    document.getElementById('modal-registro-title').textContent = 'Editar registro';
+    document.getElementById('r-fecha').value = d.fecha;
+    document.getElementById('r-prof').value = d.profId;
+    document.getElementById('r-cita').value = d.citaId || '';
+    document.getElementById('r-motivo').value = d.motivo;
+    document.getElementById('r-procedimiento').value = d.procedimiento;
+    document.getElementById('r-productos').value = d.productos;
+    document.getElementById('r-aparatologia').value = d.aparatologia || '';
+    document.getElementById('r-parametros').value = d.parametros;
+    document.getElementById('r-zonas').value = d.zonas;
+    document.getElementById('r-obs').value = d.obs;
+    document.getElementById('r-indicaciones').value = d.indicaciones;
+    document.getElementById('r-plan').value = d.plan;
+
+    // Servicio pre-seleccionado si existe
+    resetServicioSelect();
+    if (d.servicioId) {
+      const s = SERVICIOS.find(x => x.id == d.servicioId);
+      if (s) seleccionarServicio(s.id, s.nombre, s.unidad);
+    }
+
+    document.getElementById('modal-registro').classList.add('active');
+  }
+
+  function cerrarRegistro() {
+    document.getElementById('modal-registro').classList.remove('active');
+  }
+
+  /* ─── Modal Foto (subir) ─── */
+  // Diccionario id→texto de registros para el ctx del modal de subida
+  const REGISTROS_CTX = {
+    {% for r in registros %}
+    "{{ r.id }}": "Sesión del {{ r.fecha_atencion|date:'d/m/Y' }}{% if r.servicio %} · {{ r.servicio.nombre|escapejs }}{% endif %} · {{ r.profesional.nombres|escapejs }} {{ r.profesional.apellidos|escapejs }}",
+    {% endfor %}
+  };
+
+  function abrirSubirFoto(registroId) {
+    // Reset form
+    const form = document.querySelector('#modal-foto form');
+    form.reset();
+    document.getElementById('foto-fecha').value = HOY;
+
+    const ctx = document.getElementById('modal-foto-context');
+    if (registroId) {
+      document.getElementById('foto-registro').value = registroId;
+      ctx.textContent = '📷 ' + (REGISTROS_CTX[registroId] || 'Asociada a este registro');
+      ctx.style.display = '';
+    } else {
+      document.getElementById('foto-registro').value = '';
+      ctx.style.display = 'none';
+    }
+    document.getElementById('modal-foto').classList.add('active');
+  }
+
+  function cerrarFoto() {
+    document.getElementById('modal-foto').classList.remove('active');
+  }
+
+  /* ─── Modal Foto (editar) ─── */
+  function abrirEditarFoto(btn) {
+    const d = btn.dataset;
+    const form = document.getElementById('form-foto-edit');
+    form.reset();
+    form.action = '/ficha/foto/' + d.fotoId + '/editar/';
+
+    document.getElementById('fe-tipo').value = d.tipo || 'otro';
+    document.getElementById('fe-fecha').value = d.fecha || HOY;
+    document.getElementById('fe-zona').value = d.zona || '';
+    document.getElementById('fe-descripcion').value = d.descripcion || '';
+    document.getElementById('fe-registro').value = d.registroId || '';
+
+    document.getElementById('modal-foto-edit').classList.add('active');
+  }
+
+  function cerrarEditarFoto() {
+    document.getElementById('modal-foto-edit').classList.remove('active');
+  }
+
+  /* ─── Lightbox ─── */
+  function abrirLightbox(src) {
+    document.getElementById('lightbox-img').src = src;
+    document.getElementById('lightbox').classList.add('active');
+  }
+  function cerrarLightbox() {
+    document.getElementById('lightbox').classList.remove('active');
+  }
+
+  /* ─── Escape global ─── */
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('lightbox').classList.contains('active')) { cerrarLightbox(); return; }
+    cerrarRegistro();
+    cerrarFoto();
+    cerrarEditarFoto();
+  });
+
+  /* ─── Pre-carga desde agenda (cuando viene ?nuevo_para_cita=<id>) ─── */
+  {% if nueva_cita_data %}
+  document.addEventListener('DOMContentLoaded', () => {
+    const d = JSON.parse(document.getElementById('nueva-cita-data').textContent);
+    const unidad = (SERVICIOS.find(s => s.id == d.servicio_id) || {}).unidad || '';
+    abrirRegistroCita(d.id, d.fecha, d.profesional_id, d.servicio_nombre, d.servicio_id, unidad);
+  });
+  {% endif %}
+</script>
+
+{% endblock %}

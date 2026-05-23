@@ -1,0 +1,675 @@
+{% extends "core/base.html" %}
+{% load clinica_tags %}
+
+{% block title %}{{ paciente.nombres }} {{ paciente.apellidos }}{% endblock %}
+{% block page_title %}Ficha del paciente{% endblock %}
+{% block page_subtitle %}{{ paciente.nombres }} {{ paciente.apellidos }} · {{ paciente.rut|rut }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .ficha-grid {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 18px;
+    align-items: start;
+  }
+  @media (max-width: 980px) {
+    .ficha-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ── Card identidad (izquierda) ──────────────────────────── */
+  .identidad-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 20px;
+  }
+  .identidad-head {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .identidad-avatar {
+    width: 78px; height: 78px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent) 0%, #3d8468 100%);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.7rem;
+    font-weight: 600;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 14px rgba(46,125,85,0.18);
+  }
+  .identidad-nombre {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+  .identidad-rut {
+    font-family: 'Courier New', monospace;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.02em;
+    background: #f5f5f3;
+    padding: 4px 10px;
+    border-radius: 6px;
+    display: inline-block;
+    margin-top: 2px;
+  }
+  .identidad-badges {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .tipo-badge {
+    display: inline-block;
+    padding: 4px 11px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 600;
+  }
+  .tipo-badge.nuevo { background: #e0f0e8; color: #2e7d55; }
+  .tipo-badge.recurrente { background: #e1ebf8; color: #3b6fbf; }
+  .tipo-badge.perdido { background: #fbe6e6; color: #c41c3b; }
+  .status-pill {
+    display: inline-block;
+    padding: 4px 11px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 600;
+  }
+  .status-pill.activo { background: #e0f0e8; color: #2e7d55; }
+  .status-pill.inactivo { background: #f0f0f0; color: var(--text-muted); }
+
+  .info-list { font-size: 0.84rem; }
+  .info-row {
+    display: flex;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-label {
+    width: 130px;
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 0.78rem;
+    flex-shrink: 0;
+  }
+  .info-value {
+    color: var(--text-primary);
+    flex: 1;
+    word-break: break-word;
+  }
+  .info-value.empty { color: var(--text-muted); font-style: italic; }
+
+  .reclasif-alert {
+    margin-top: 14px;
+    padding: 10px 12px;
+    background: linear-gradient(135deg, #fff8e6 0%, #fff 100%);
+    border: 1px solid #f1d989;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    color: #8d6c1d;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .reclasif-alert form { margin: 0; }
+  .reclasif-alert button {
+    background: #fff;
+    border: 1px solid #c4870c;
+    color: #c4870c;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.74rem;
+    cursor: pointer;
+    font-weight: 600;
+    font-family: inherit;
+  }
+  .reclasif-alert button:hover { background: #fff8e6; }
+
+  /* ── KPIs (derecha arriba — mismo estilo que .stat-mini) ── */
+  .kpis-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  @media (max-width: 1200px) {
+    .kpis-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  .kpi-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+  }
+  .kpi-card .label {
+    font-size: 0.69rem; font-weight: 500; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px;
+  }
+  .kpi-card .value {
+    font-family: var(--font-body); font-size: 1.8rem; font-weight: 300;
+    color: var(--text-primary); line-height: 1; margin-top: 4px;
+    letter-spacing: -0.02em;
+  }
+  .kpi-card .sub {
+    font-size: 0.72rem; color: var(--text-muted); margin-top: 4px;
+  }
+  .kpi-card.highlight { border-left: 3px solid var(--accent); }
+  .kpi-card .value.money { color: #2e7d55; font-weight: 500; }
+
+  /* ── Cards genéricas derecha (estilo form-section/proyecto) ── */
+  .right-stack { display: flex; flex-direction: column; gap: 16px; }
+  .panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 18px 20px;
+  }
+  .panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-title {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .panel-subtitle {
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* ── Próxima cita destacada ─────────────────────────────── */
+  .proxima-cita {
+    background: linear-gradient(135deg, #e8f4ee 0%, #ffffff 100%);
+    border: 1px solid #c8e8d8;
+    padding: 14px 18px;
+    border-radius: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+  }
+  .proxima-cita .fecha-grande {
+    font-family: var(--font-body);
+    font-size: 1.4rem;
+    font-weight: 500;
+    color: var(--accent-hover, #2e7d55);
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+  }
+  .proxima-cita .detalle {
+    font-size: 0.82rem;
+    color: var(--text-primary);
+  }
+  .proxima-cita .estado-pill {
+    font-size: 0.72rem;
+    padding: 4px 10px;
+    background: #fff;
+    border: 1px solid var(--accent);
+    color: var(--accent-hover, #2e7d55);
+    border-radius: 20px;
+    font-weight: 500;
+  }
+
+  /* ── Historial ───────────────────────────────────────────── */
+  .hist-row-header {
+    display: grid;
+    grid-template-columns: 110px 1fr 1fr 110px 100px;
+    gap: 12px;
+    padding: 10px 14px;
+    background: #fafaf8;
+    border-radius: 6px;
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .hist-row {
+    display: grid;
+    grid-template-columns: 110px 1fr 1fr 110px 100px;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    align-items: center;
+    font-size: 0.84rem;
+  }
+  .hist-row:last-child { border-bottom: none; }
+  .hist-row:hover { background: #fafaf8; }
+  .hist-fecha { font-weight: 500; color: var(--text-primary); }
+  .hist-fecha .hora { color: var(--text-muted); font-weight: 400; font-size: 0.78rem; margin-left: 4px; }
+  .hist-servicio { color: var(--text-primary); }
+  .hist-prof { color: var(--text-secondary); font-size: 0.82rem; }
+  .hist-monto { font-family: 'Courier New', monospace; color: var(--text-primary); }
+
+  .estado-cita-pill {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-align: center;
+  }
+  .estado-cita-pill.asistio { background: #e0f0e8; color: #1e5e3f; }
+  .estado-cita-pill.confirmado { background: #d8eef0; color: #1d6e7a; }
+  .estado-cita-pill.reservado { background: #e1ebf8; color: #3b6fbf; }
+  .estado-cita-pill.pendiente { background: #fff4e0; color: #9d6c00; }
+  .estado-cita-pill.en_espera { background: #ffe9d4; color: #b86305; }
+  .estado-cita-pill.no_asistio { background: #f0f0f0; color: var(--text-muted); }
+  .estado-cita-pill.cancelada { background: #fbe6e6; color: #9d2024; }
+  .estado-cita-pill.reprogramada { background: #ede1f8; color: #6a3eb8; }
+
+  /* ── Form editar ─────────────────────────────────────────── */
+  .editar-form { display: none; }
+  .editar-form.show { display: block; animation: fadein 0.2s ease; }
+  .vista-form { display: block; }
+  .vista-form.hide { display: none; }
+  @keyframes fadein {
+    from { opacity: 0; transform: translateY(-2px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .form-group { margin-bottom: 12px; }
+  .form-group label {
+    display: block;
+    font-size: 0.76rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+  }
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    background: var(--bg-card);
+    font-family: inherit;
+    box-sizing: border-box;
+  }
+  .form-group input:focus,
+  .form-group select:focus,
+  .form-group textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(61, 132, 104, 0.1);
+  }
+  .form-actions {
+    display: flex; gap: 12px; justify-content: flex-end; margin-top: 18px;
+  }
+  .btn-secondary {
+    background: #f0f0f0; color: var(--text-primary);
+    padding: 10px 20px; border: none; border-radius: var(--radius-sm);
+    font-weight: 500; cursor: pointer; font-size: 0.9rem; font-family: inherit;
+  }
+  .btn-editar {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 7px 14px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 500;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .btn-editar:hover { background: var(--accent-light, #e8f4ee); }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'pacientes' %}" class="btn btn-ghost" style="font-size:0.82rem; padding:7px 14px;">
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+  Volver a la lista
+</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="ficha-grid">
+
+  <!-- ═══ IZQUIERDA: Identidad + datos ═══ -->
+  <div class="identidad-card">
+    <div class="identidad-head">
+      <div class="identidad-avatar">
+        {{ paciente.nombres|slice:":1" }}{{ paciente.apellidos|slice:":1" }}
+      </div>
+      <div class="identidad-nombre">{{ paciente.nombres }} {{ paciente.apellidos }}</div>
+      <div class="identidad-rut">{{ paciente.rut|rut }}</div>
+      <div class="identidad-badges">
+        <span class="tipo-badge {{ paciente.tipo_cliente }}">{{ paciente.get_tipo_cliente_display }}</span>
+        <span class="status-pill {% if paciente.activo %}activo{% else %}inactivo{% endif %}">
+          {% if paciente.activo %}Activo{% else %}Inactivo{% endif %}
+        </span>
+      </div>
+    </div>
+
+    <!-- Vista lectura -->
+    <div class="vista-form" id="vista-datos">
+      <div class="info-list">
+        <div class="info-row">
+          <div class="info-label">Edad</div>
+          <div class="info-value {% if not paciente.edad %}empty{% endif %}">
+            {% if paciente.edad %}{{ paciente.edad }} años{% else %}—{% endif %}
+          </div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Nacimiento</div>
+          <div class="info-value {% if not paciente.fecha_nacimiento %}empty{% endif %}">
+            {% if paciente.fecha_nacimiento %}{{ paciente.fecha_nacimiento|date:"d/m/Y" }}{% else %}Sin registrar{% endif %}
+          </div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Teléfono</div>
+          <div class="info-value">{{ paciente.telefono }}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Email</div>
+          <div class="info-value {% if not paciente.email %}empty{% endif %}">
+            {{ paciente.email|default:"Sin registrar" }}
+          </div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Género</div>
+          <div class="info-value {% if not paciente.genero %}empty{% endif %}">
+            {{ paciente.get_genero_display|default:"Sin especificar" }}
+          </div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Sucursal</div>
+          <div class="info-value">{{ paciente.sucursal.nombre }}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Ingreso</div>
+          <div class="info-value">{{ paciente.fecha_ingreso|date:"d/m/Y" }}</div>
+        </div>
+        {% if paciente.origen %}
+        <div class="info-row">
+          <div class="info-label">Origen</div>
+          <div class="info-value">{{ paciente.origen }}</div>
+        </div>
+        {% endif %}
+        {% if paciente.observaciones %}
+        <div class="info-row" style="flex-direction:column; align-items:flex-start; gap:4px;">
+          <div class="info-label">Observaciones</div>
+          <div class="info-value" style="font-size:0.8rem;">{{ paciente.observaciones|linebreaksbr }}</div>
+        </div>
+        {% endif %}
+      </div>
+
+      {% if tipo_difiere %}
+      <div class="reclasif-alert">
+        <span>
+          ⚠️ Según historial, debería ser: <strong>{{ tipo_auto|capfirst }}</strong>
+        </span>
+        <form method="post" action="{% url 'reclasificar_paciente' paciente.id %}">
+          {% csrf_token %}
+          <button type="submit">Reclasificar</button>
+        </form>
+      </div>
+      {% endif %}
+
+      <a href="{% url 'ficha_clinica' paciente.id %}"
+         class="btn btn-primary"
+         style="display:flex; align-items:center; justify-content:center; gap:8px; width:100%; margin-top:18px; padding:11px 16px; font-size:0.88rem; text-decoration:none;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+        </svg>
+        Ver ficha clínica
+      </a>
+
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <button class="btn-editar" onclick="toggleEditar(true)" style="flex:1;">
+          ✏️ Editar
+        </button>
+        <form method="post" action="{% url 'toggle_paciente' paciente.id %}" style="flex:1;">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="detalle">
+          <button type="submit" class="btn-editar" style="width:100%; {% if not paciente.activo %}border-color:#4caf8a;color:#4caf8a;{% else %}border-color:#d9514e;color:#d9514e;{% endif %}">
+            {% if paciente.activo %}Desactivar{% else %}Reactivar{% endif %}
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Vista edición -->
+    <div class="editar-form" id="form-editar">
+      <form method="post" action="{% url 'editar_paciente' paciente.id %}">
+        {% csrf_token %}
+        <div class="form-group">
+          <label>Nombres *</label>
+          <input type="text" name="nombres" value="{{ paciente.nombres }}" required maxlength="100">
+        </div>
+        <div class="form-group">
+          <label>Apellidos</label>
+          <input type="text" name="apellidos" value="{{ paciente.apellidos }}" maxlength="100">
+        </div>
+        <div class="form-group">
+          <label>RUT *</label>
+          <input type="text" name="rut" id="ed-rut" value="{{ paciente.rut }}" required maxlength="12">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Fecha nacimiento</label>
+            <input type="date" name="fecha_nacimiento" value="{% if paciente.fecha_nacimiento %}{{ paciente.fecha_nacimiento|date:'Y-m-d' }}{% endif %}">
+          </div>
+          <div class="form-group">
+            <label>Género</label>
+            <select name="genero">
+              <option value="">—</option>
+              {% for val, lbl in generos %}
+              <option value="{{ val }}" {% if paciente.genero == val %}selected{% endif %}>{{ lbl }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Teléfono *</label>
+          <input type="text" name="telefono" value="{{ paciente.telefono }}" required maxlength="12">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" name="email" value="{{ paciente.email }}" maxlength="120">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Tipo de cliente</label>
+            <select name="tipo_cliente">
+              {% for val, lbl in tipos_cliente %}
+              <option value="{{ val }}" {% if paciente.tipo_cliente == val %}selected{% endif %}>{{ lbl }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Origen</label>
+            <input type="text" name="origen" value="{{ paciente.origen }}" maxlength="100">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Observaciones</label>
+          <textarea name="observaciones" rows="3">{{ paciente.observaciones }}</textarea>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn-secondary" onclick="toggleEditar(false)">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══ DERECHA: KPIs + Próxima cita + Historial ═══ -->
+  <div class="right-stack">
+
+    <!-- KPIs -->
+    <div class="kpis-grid">
+      <div class="kpi-card highlight">
+        <div class="label">Visitas</div>
+        <div class="value">{{ total_visitas }}</div>
+        <div class="sub">{{ total_citas }} cita{{ total_citas|pluralize }} total</div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">Total gastado</div>
+        <div class="value money">{{ total_gastado|pesos }}</div>
+        <div class="sub">acumulado en pagos</div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">Servicio favorito</div>
+        <div class="value" style="font-size:0.92rem; font-family:var(--font-body); font-weight:500; margin-top:8px;">
+          {% if servicio_fav %}{{ servicio_fav.servicio__nombre }}{% else %}—{% endif %}
+        </div>
+        <div class="sub">{% if servicio_fav %}{{ servicio_fav.n }} vez{{ servicio_fav.n|pluralize:"es" }}{% else %}sin datos{% endif %}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">Profesional habitual</div>
+        <div class="value" style="font-size:0.92rem; font-family:var(--font-body); font-weight:500; margin-top:8px;">
+          {% if prof_habitual %}{{ prof_habitual.profesional__nombres }} {{ prof_habitual.profesional__apellidos }}{% else %}—{% endif %}
+        </div>
+        <div class="sub">{% if prof_habitual %}{{ prof_habitual.n }} vez{{ prof_habitual.n|pluralize:"es" }}{% else %}sin datos{% endif %}</div>
+      </div>
+    </div>
+
+    <!-- Próxima cita -->
+    {% if proxima_cita %}
+    <div class="panel">
+      <div class="panel-head" style="border:none; padding:0; margin-bottom:10px;">
+        <div>
+          <div class="panel-title">📅 Próxima cita</div>
+        </div>
+      </div>
+      <div class="proxima-cita">
+        <div>
+          <div class="fecha-grande">
+            {{ proxima_cita.fecha|date:"l j \d\e F"|capfirst }}
+          </div>
+          <div class="detalle" style="margin-top:4px;">
+            🕐 {{ proxima_cita.hora_inicio|time:"H:i" }} hrs ·
+            {{ proxima_cita.servicio.nombre }}
+          </div>
+          <div class="detalle" style="margin-top:3px; color:var(--text-muted); font-size:0.78rem;">
+            Atiende: {{ proxima_cita.profesional.nombres }} {{ proxima_cita.profesional.apellidos }}
+          </div>
+        </div>
+        <span class="estado-pill">{{ proxima_cita.get_estado_display }}</span>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Historial -->
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Historial de citas</div>
+          <div class="panel-subtitle">
+            {% if primera_visita %}
+              Primera visita: {{ primera_visita.fecha|date:"d/m/Y" }} ·
+            {% endif %}
+            {{ total_citas }} cita{{ total_citas|pluralize }} en total
+          </div>
+        </div>
+      </div>
+
+      {% if historial %}
+      <div class="hist-row-header">
+        <div>Fecha</div>
+        <div>Servicio</div>
+        <div>Profesional</div>
+        <div>Monto</div>
+        <div>Estado</div>
+      </div>
+      {% for c in historial %}
+      <div class="hist-row">
+        <div class="hist-fecha">
+          {{ c.fecha|date:"d/m/Y" }}
+          <span class="hora">{{ c.hora_inicio|time:"H:i" }}</span>
+        </div>
+        <div class="hist-servicio">{{ c.servicio.nombre }}</div>
+        <div class="hist-prof">{{ c.profesional.nombres }} {{ c.profesional.apellidos|slice:":1" }}.</div>
+        <div class="hist-monto">
+          {% if c.monto_total %}{{ c.monto_total|pesos }}{% else %}—{% endif %}
+        </div>
+        <div>
+          <span class="estado-cita-pill {{ c.estado }}">{{ c.get_estado_display }}</span>
+        </div>
+      </div>
+      {% endfor %}
+      {% if total_citas > 30 %}
+      <p style="text-align:center; font-size:0.78rem; color:var(--text-muted); margin-top:12px;">
+        Mostrando las 30 más recientes de {{ total_citas }}.
+      </p>
+      {% endif %}
+      {% else %}
+      <div style="padding:40px 16px; text-align:center;">
+        <p style="color:var(--text-muted); font-size:0.86rem;">
+          Este paciente todavía no tiene citas registradas.
+        </p>
+        <a href="{% url 'agenda' %}" class="btn btn-primary" style="margin-top:14px; display:inline-flex; padding:8px 16px;">
+          Ir a la agenda
+        </a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+  function toggleEditar(open) {
+    document.getElementById('vista-datos').classList.toggle('hide', !!open);
+    document.getElementById('form-editar').classList.toggle('show', !!open);
+  }
+
+  // Auto-formato RUT en form de edición
+  function formatearRutChileno(rut) {
+    rut = (rut || '').replace(/[^0-9kK]/g, '').toUpperCase();
+    if (rut.length === 0) return '';
+    if (rut.length === 1) return rut;
+    const cuerpo = rut.slice(0, -1);
+    const dv = rut.slice(-1);
+    return cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + dv;
+  }
+  const edRut = document.getElementById('ed-rut');
+  if (edRut) {
+    // Formatear valor inicial
+    edRut.value = formatearRutChileno(edRut.value);
+    edRut.addEventListener('input', e => {
+      const pos = e.target.selectionStart;
+      const antes = e.target.value.length;
+      e.target.value = formatearRutChileno(e.target.value);
+      const diff = e.target.value.length - antes;
+      e.target.setSelectionRange(pos + diff, pos + diff);
+    });
+  }
+</script>
+
+{% endblock %}
