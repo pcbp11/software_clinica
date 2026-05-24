@@ -93,6 +93,11 @@ def agenda_view(request):
     # de la vista de agenda).
     todos_profesionales = Profesional.objects.filter(activo=True).order_by('nombres', 'apellidos')
 
+    # Boxes activos para el selector del modal de nueva cita / detalle.
+    # Lazy import porque Box se declara al final de models.py.
+    from .models import Box
+    boxes_activos = Box.objects.filter(activo=True).order_by('sucursal__nombre', 'numero')
+
     profesionales = todos_profesionales
 
     # Filtrar por sucursal si se especifica
@@ -276,6 +281,7 @@ def agenda_view(request):
         "pacientes": pacientes,
         "profesionales": profesionales,
         "todos_profesionales": todos_profesionales,
+        "boxes_activos": boxes_activos,
         "profesional_id": profesional_id,
         "sucursales": sucursales,
         "total_height_px": total_height_px,
@@ -284,6 +290,45 @@ def agenda_view(request):
         "slot_h": SLOT_H,
     }
     return render(request, "core/agenda.html", context)
+
+
+# ── HELPER: detectar doble-booking de box ────────────────────────────────
+def _detectar_doble_booking_box(box, fecha, hora_inicio, hora_fin=None,
+                                  servicio=None, exclude_cita_id=None):
+    """Retorna la primera Cita que solapa con el rango dado en el mismo box.
+
+    Si no hay solapamiento, retorna None.
+    Se ignoran citas canceladas o no_asistio.
+    """
+    if not (box and fecha and hora_inicio):
+        return None
+
+    # Calcular hora_fin si no viene
+    if not hora_fin and servicio:
+        from datetime import datetime as _dt, timedelta as _td
+        inicio_dt = _dt.combine(fecha, hora_inicio)
+        hora_fin = (inicio_dt + _td(minutes=servicio.duracion_minutos)).time()
+    if not hora_fin:
+        return None
+
+    citas_box = Cita.objects.filter(
+        box=box, fecha=fecha
+    ).exclude(estado__in=['cancelada', 'no_asistio']).select_related('profesional')
+    if exclude_cita_id:
+        citas_box = citas_box.exclude(id=exclude_cita_id)
+
+    for c in citas_box:
+        c_fin = c.hora_fin
+        if not c_fin and c.servicio:
+            from datetime import datetime as _dt, timedelta as _td
+            inicio_dt = _dt.combine(c.fecha, c.hora_inicio)
+            c_fin = (inicio_dt + _td(minutes=c.servicio.duracion_minutos)).time()
+        if not c_fin:
+            continue
+        # Solapan si: nuevo.inicio < existente.fin Y existente.inicio < nuevo.fin
+        if hora_inicio < c_fin and c.hora_inicio < hora_fin:
+            return c
+    return None
 
 
 # ── CREAR CITA ────────────────────────────────────────────────────────────
@@ -341,12 +386,36 @@ def crear_cita(request):
         hora_str = request.POST.get('hora_inicio', '')
         fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
         hora = datetime.strptime(hora_str, '%H:%M').time()
+
+        # Box opcional (asignación al crear, modificable después)
+        from .models import Box
+        box = None
+        box_id = request.POST.get('box') or None
+        if box_id:
+            box = Box.objects.filter(id=box_id, activo=True).first()
+
         cita = Cita(
             sucursal=sucursal, paciente=paciente, profesional=profesional,
             servicio=servicio, fecha=fecha, hora_inicio=hora,
+            box=box,
             observaciones=request.POST.get('observaciones', ''),
         )
         cita.save()
+
+        # Alerta de doble-booking de box (no bloquea, solo avisa)
+        if box:
+            conflicto = _detectar_doble_booking_box(
+                box=box, fecha=fecha, hora_inicio=hora,
+                servicio=servicio, exclude_cita_id=cita.id,
+            )
+            if conflicto:
+                messages.warning(
+                    request,
+                    f'⚠️ Aviso: {box.nombre} ya tiene otra cita superpuesta '
+                    f'({conflicto.profesional} a las {conflicto.hora_inicio.strftime("%H:%M")}). '
+                    'La cita se guardó igual.'
+                )
+
         messages.success(request,
             f'Cita agendada: {paciente.nombres} {paciente.apellidos} · {servicio.nombre} · {hora.strftime("%H:%M")}')
     except ValidationError as e:
@@ -432,6 +501,8 @@ def detalle_cita(request, cita_id):
         'servicio_id': cita.servicio.id,
         'profesional': str(cita.profesional),
         'profesional_id': cita.profesional.id,
+        'box_id': cita.box.id if cita.box else None,
+        'box_nombre': cita.box.nombre if cita.box else '',
         'tiene_registro_atencion': tiene_registro,
         'registro_atencion_id': registro_atencion_id,
         'fecha': cita.fecha.strftime('%d/%m/%Y'),
@@ -459,16 +530,70 @@ def detalle_cita(request, cita_id):
 def actualizar_estado_cita(request, cita_id):
     if request.method != 'POST':
         return JsonResponse({'error': 'Método no permitido'}, status=405)
-    cita = get_object_or_404(Cita, id=cita_id)
+    cita = get_object_or_404(Cita.objects.select_related('box'), id=cita_id)
     nuevo_estado = request.POST.get('estado')
     if nuevo_estado not in [e[0] for e in Cita.ESTADOS]:
         return JsonResponse({'error': 'Estado no válido'}, status=400)
+
+    # ── Validación: al marcar "Asistió" debe haber box asignado ──
+    # El box es crítico para tracking de uso y cálculo de comisiones.
+    # (Próximamente se sumará validación de insumos.)
+    if nuevo_estado == 'asistio' and not cita.box:
+        return JsonResponse({
+            'error': 'Debes asignar un box antes de marcar la cita como Asistió.',
+            'requiere_box': True,
+        }, status=400)
+
     cita.estado = nuevo_estado
     cita.save()
     return JsonResponse({
         'ok': True,
         'estado': cita.estado,
         'estado_display': cita.get_estado_display(),
+    })
+
+
+# ── CITA: CAMBIAR BOX (AJAX) ──────────────────────────────────────────────
+@login_required
+def actualizar_box_cita(request, cita_id):
+    """Cambia el box asignado a una cita. Retorna alerta si hay doble-booking."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método no permitido'}, status=405)
+    cita = get_object_or_404(Cita.objects.select_related('servicio', 'profesional'), id=cita_id)
+
+    from .models import Box
+    box_id = request.POST.get('box') or ''
+    if box_id == '':
+        # Quitar el box
+        cita.box = None
+        cita.save(update_fields=['box'])
+        return JsonResponse({'ok': True, 'box_id': None, 'box_nombre': ''})
+
+    box = Box.objects.filter(id=box_id, activo=True).first()
+    if not box:
+        return JsonResponse({'error': 'Box no encontrado o inactivo'}, status=400)
+
+    cita.box = box
+    cita.save(update_fields=['box'])
+
+    # Doble-booking — solo alerta
+    warning = None
+    conflicto = _detectar_doble_booking_box(
+        box=box, fecha=cita.fecha, hora_inicio=cita.hora_inicio,
+        hora_fin=cita.hora_fin, servicio=cita.servicio,
+        exclude_cita_id=cita.id,
+    )
+    if conflicto:
+        warning = (
+            f'⚠️ {box.nombre} ya tiene otra cita superpuesta '
+            f'({conflicto.profesional} a las {conflicto.hora_inicio.strftime("%H:%M")}).'
+        )
+
+    return JsonResponse({
+        'ok': True,
+        'box_id': box.id,
+        'box_nombre': box.nombre,
+        'warning': warning,
     })
 
 
@@ -3182,3 +3307,163 @@ def servir_foto_evolucion(request, foto_id):
 
     _log_ficha(request, foto.paciente, 'foto_view', f'Foto #{foto.id} vista')
     return FileResponse(foto.archivo.open('rb'), content_type='image/jpeg')
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BOXES DE ATENCIÓN
+# ═══════════════════════════════════════════════════════════════════════════
+
+from .models import Box  # import al final para evitar problemas de orden
+
+
+@login_required
+def boxes_view(request):
+    """Listado de boxes con búsqueda y filtros."""
+    busqueda = (request.GET.get('q', '') or '').strip()
+    estado_filtro = request.GET.get('estado', '')
+
+    boxes = Box.objects.select_related('sucursal').prefetch_related(
+        'profesionales_habituales', 'servicios_disponibles'
+    ).order_by('sucursal__nombre', 'numero')
+
+    if busqueda:
+        boxes = boxes.filter(
+            Q(nombre__icontains=busqueda) |
+            Q(descripcion__icontains=busqueda)
+        )
+    if estado_filtro == 'activos':
+        boxes = boxes.filter(activo=True)
+    elif estado_filtro == 'inactivos':
+        boxes = boxes.filter(activo=False)
+
+    # Stats
+    total = Box.objects.count()
+    activos = Box.objects.filter(activo=True).count()
+    universal = Box.objects.filter(es_acceso_universal=True, activo=True).count()
+
+    context = {
+        'boxes': boxes,
+        'busqueda': busqueda,
+        'estado_selected': estado_filtro,
+        'total': total,
+        'activos': activos,
+        'universal': universal,
+        'sucursales': Sucursal.objects.filter(activa=True).order_by('nombre'),
+        'todos_profesionales': Profesional.objects.filter(activo=True).order_by('nombres', 'apellidos'),
+        'todos_servicios': Servicio.objects.filter(activo=True).order_by('nombre'),
+    }
+    return render(request, 'core/boxes.html', context)
+
+
+@login_required
+def crear_box(request):
+    if request.method != 'POST':
+        return redirect('boxes')
+    try:
+        sucursal_id = request.POST.get('sucursal')
+        sucursal = get_object_or_404(Sucursal, id=sucursal_id, activa=True) if sucursal_id \
+            else Sucursal.objects.filter(activa=True).first()
+        if not sucursal:
+            messages.error(request, 'No hay sucursal activa.')
+            return redirect('boxes')
+
+        numero_raw = request.POST.get('numero', '').strip()
+        if not numero_raw or not numero_raw.isdigit():
+            messages.error(request, 'El número del box es obligatorio (debe ser un entero).')
+            return redirect('boxes')
+        numero = int(numero_raw)
+
+        if Box.objects.filter(sucursal=sucursal, numero=numero).exists():
+            messages.error(request, f'Ya existe un Box #{numero} en {sucursal.nombre}.')
+            return redirect('boxes')
+
+        nombre = (request.POST.get('nombre', '') or '').strip() or f'Box {numero}'
+
+        box = Box.objects.create(
+            sucursal=sucursal,
+            numero=numero,
+            nombre=nombre,
+            descripcion=(request.POST.get('descripcion', '') or '').strip(),
+            es_acceso_universal=request.POST.get('es_acceso_universal') == 'on',
+            fecha_inicio_uso=request.POST.get('fecha_inicio_uso') or None,
+            activo=True,
+        )
+
+        # M2M opcionales en creación (típicamente se asignan después en editar)
+        prof_ids = request.POST.getlist('profesionales_habituales')
+        if prof_ids:
+            box.profesionales_habituales.set(prof_ids)
+        serv_ids = request.POST.getlist('servicios_disponibles')
+        if serv_ids:
+            box.servicios_disponibles.set(serv_ids)
+
+        messages.success(request, f'{box.nombre} creado correctamente.')
+    except Exception as e:
+        messages.error(request, f'Error al crear box: {e}')
+    return redirect('boxes')
+
+
+@login_required
+def editar_box(request, box_id):
+    box = get_object_or_404(Box, id=box_id)
+    if request.method != 'POST':
+        return redirect('boxes')
+    try:
+        # Validar numero único por sucursal si cambia
+        numero_raw = request.POST.get('numero', '').strip()
+        if numero_raw and numero_raw.isdigit():
+            numero = int(numero_raw)
+            if numero != box.numero and Box.objects.filter(
+                sucursal=box.sucursal, numero=numero
+            ).exclude(id=box.id).exists():
+                messages.error(request, f'Ya existe otro Box #{numero} en esa sucursal.')
+                return redirect('boxes')
+            box.numero = numero
+
+        nombre = (request.POST.get('nombre', '') or '').strip()
+        if nombre:
+            box.nombre = nombre
+        box.descripcion = (request.POST.get('descripcion', '') or '').strip()
+        box.es_acceso_universal = request.POST.get('es_acceso_universal') == 'on'
+        box.fecha_inicio_uso = request.POST.get('fecha_inicio_uso') or None
+
+        box.save()
+
+        # M2M — set REEMPLAZA, así que respeta la lista exacta del form
+        box.profesionales_habituales.set(request.POST.getlist('profesionales_habituales'))
+        box.servicios_disponibles.set(request.POST.getlist('servicios_disponibles'))
+
+        messages.success(request, f'{box.nombre} actualizado correctamente.')
+    except Exception as e:
+        messages.error(request, f'Error al editar box: {e}')
+    return redirect('boxes')
+
+
+@login_required
+def toggle_box(request, box_id):
+    box = get_object_or_404(Box, id=box_id)
+    box.activo = not box.activo
+    box.save(update_fields=['activo'])
+    estado = 'activado' if box.activo else 'desactivado'
+    messages.success(request, f'{box.nombre} {estado}.')
+    return redirect('boxes')
+
+
+@login_required
+def eliminar_box(request, box_id):
+    box = get_object_or_404(Box, id=box_id)
+    if request.method != 'POST':
+        return redirect('boxes')
+    # Si tiene citas asociadas, no permitir eliminar — usar desactivar en su lugar
+    if box.citas.exists():
+        n = box.citas.count()
+        messages.error(
+            request,
+            f'No se puede eliminar {box.nombre}: tiene {n} cita{("s" if n != 1 else "")} asociada{("s" if n != 1 else "")}. '
+            'Desactivalo en su lugar para preservar el histórico.'
+        )
+        return redirect('boxes')
+    nombre = box.nombre
+    box.delete()
+    messages.success(request, f'{nombre} eliminado.')
+    return redirect('boxes')

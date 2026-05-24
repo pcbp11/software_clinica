@@ -260,6 +260,16 @@ class Cita(models.Model):
 
     observaciones = models.TextField(blank=True)
 
+    # Box donde se realiza/realizó la atención (opcional, asignable al crear
+    # o al cerrar la cita; modificable en cualquier momento).
+    box = models.ForeignKey(
+        'Box',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='citas'
+    )
+
     cita_origen = models.ForeignKey(
         'self',
         null=True,
@@ -1106,3 +1116,79 @@ class AuditLogFicha(models.Model):
     def __str__(self):
         u = self.usuario.username if self.usuario else 'sistema'
         return f"{u} — {self.get_accion_display()} — {self.paciente}"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BOXES DE ATENCIÓN
+# Espacios físicos donde se realizan las atenciones. Cada box puede ser usado
+# por varios profesionales y ofrecer varios servicios. Al crear/atender una
+# cita, se asigna a un box para tracking.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class Box(models.Model):
+    """Box de atención físico en una sucursal.
+
+    Datos cargados desde el documento real de la clínica:
+    11 boxes con su tipo, profesionales habituales y servicios disponibles.
+    """
+    sucursal = models.ForeignKey(
+        Sucursal, on_delete=models.CASCADE, related_name='boxes'
+    )
+    numero = models.PositiveIntegerField(
+        help_text="Número del box (1, 2, 3...). Único por sucursal."
+    )
+    nombre = models.CharField(
+        max_length=150,
+        help_text="Ej: 'Box 1 - Sala de Procedimientos', 'Box 10 - Ginecología'"
+    )
+    descripcion = models.TextField(
+        blank=True,
+        help_text="Detalles del equipamiento o características especiales."
+    )
+
+    # Características especiales
+    es_acceso_universal = models.BooleanField(
+        default=False,
+        help_text="Box accesible para cualquier profesional/servicio (ej: Box 11)."
+    )
+    fecha_inicio_uso = models.DateField(
+        null=True, blank=True,
+        help_text="Si el box recién empieza a usarse desde una fecha específica."
+    )
+
+    activo = models.BooleanField(default=True)
+
+    # Relaciones M2M con profesionales y servicios
+    profesionales_habituales = models.ManyToManyField(
+        Profesional, blank=True, related_name='boxes_habituales',
+        help_text="Profesionales que típicamente usan este box."
+    )
+    servicios_disponibles = models.ManyToManyField(
+        Servicio, blank=True, related_name='boxes_disponibles',
+        help_text="Servicios que se pueden realizar en este box."
+    )
+
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Box de atención"
+        verbose_name_plural = "Boxes de atención"
+        ordering = ['sucursal', 'numero']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['sucursal', 'numero'],
+                name='unique_box_numero_por_sucursal'
+            )
+        ]
+
+    def __str__(self):
+        return self.nombre or f"Box {self.numero}"
+
+    @property
+    def disponible_hoy(self):
+        """True si el box ya está en uso (fecha_inicio_uso <= hoy o sin fecha)."""
+        if not self.fecha_inicio_uso:
+            return True
+        return self.fecha_inicio_uso <= date.today()

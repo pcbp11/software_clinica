@@ -37,6 +37,7 @@ urlpatterns = [
     path('citas/nueva/', views.crear_cita, name='crear_cita'),
     path('citas/<int:cita_id>/detalle/', views.detalle_cita, name='detalle_cita'),
     path('citas/<int:cita_id>/estado/', views.actualizar_estado_cita, name='actualizar_estado_cita'),
+    path('citas/<int:cita_id>/box/', views.actualizar_box_cita, name='actualizar_box_cita'),
     path('citas/<int:cita_id>/pago/', views.registrar_pago_cita, name='registrar_pago_cita'),
     path('citas/<int:cita_id>/reagendar/', views.reagendar_cita, name='reagendar_cita'),
 
@@ -51,6 +52,13 @@ urlpatterns = [
     path('profesionales/<int:profesional_id>/estructura/crear/', views.crear_estructura_comision, name='crear_estructura_comision'),
     path('profesionales/estructura/<int:estructura_id>/editar/', views.editar_estructura_comision, name='editar_estructura_comision'),
     path('profesionales/estructura/<int:estructura_id>/eliminar/', views.eliminar_estructura_comision, name='eliminar_estructura_comision'),
+
+    # Boxes de atención
+    path('boxes/', views.boxes_view, name='boxes'),
+    path('boxes/crear/', views.crear_box, name='crear_box'),
+    path('boxes/<int:box_id>/editar/', views.editar_box, name='editar_box'),
+    path('boxes/<int:box_id>/toggle/', views.toggle_box, name='toggle_box'),
+    path('boxes/<int:box_id>/eliminar/', views.eliminar_box, name='eliminar_box'),
 
     # Categorias de Servicio
     path('categorias/', views.categorias_view, name='categorias'),

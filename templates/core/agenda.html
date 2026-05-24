@@ -1443,14 +1443,25 @@
             </div>
           </div>
 
-          <div class="mc-field">
-            <label class="mc-label" for="m-profesional">Profesional <span class="mc-required">*</span></label>
-            <select id="m-profesional" name="profesional" class="mc-input" required>
-              <option value="">— Selecciona un profesional —</option>
-              {% for prof in todos_profesionales %}
-              <option value="{{ prof.id }}">{{ prof.nombres }} {{ prof.apellidos }}{% if prof.nombre_publico %} ({{ prof.nombre_publico }}){% endif %}</option>
-              {% endfor %}
-            </select>
+          <div class="mc-grid-2">
+            <div class="mc-field">
+              <label class="mc-label" for="m-profesional">Profesional <span class="mc-required">*</span></label>
+              <select id="m-profesional" name="profesional" class="mc-input" required>
+                <option value="">— Selecciona —</option>
+                {% for prof in todos_profesionales %}
+                <option value="{{ prof.id }}">{{ prof.nombres }} {{ prof.apellidos }}{% if prof.nombre_publico %} ({{ prof.nombre_publico }}){% endif %}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mc-field">
+              <label class="mc-label" for="m-box">Box de atención <span style="color:var(--text-muted); font-weight:400; font-size:0.74rem;">(opcional)</span></label>
+              <select id="m-box" name="box" class="mc-input">
+                <option value="">— Sin asignar —</option>
+                {% for b in boxes_activos %}
+                <option value="{{ b.id }}">{{ b.nombre }}</option>
+                {% endfor %}
+              </select>
+            </div>
           </div>
         </div>
 
@@ -1607,6 +1618,22 @@
         <div class="md-section">
           <div class="md-section-label">Estado</div>
           <div class="md-estados" id="md-estados"></div>
+        </div>
+
+        <!-- Box de atención (editable inline) -->
+        <div class="md-section" id="md-box-section">
+          <div class="md-section-label">Box de atención</div>
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <select id="md-box-select" onchange="actualizarBoxCita(this)"
+                    style="padding:7px 11px; border:1px solid var(--border); border-radius:7px; font-size:0.84rem; background:#fff; font-family:inherit; min-width:240px;">
+              <option value="">— Sin asignar —</option>
+              {% for b in boxes_activos %}
+              <option value="{{ b.id }}">{{ b.nombre }}</option>
+              {% endfor %}
+            </select>
+            <span id="md-box-warning" style="display:none; font-size:0.74rem; color:#8d6c1d; background:#fff8e6; border:1px solid #f1d989; padding:4px 9px; border-radius:6px;"></span>
+            <span id="md-box-saved" style="display:none; font-size:0.74rem; color:var(--accent); font-weight:500;">✓ Guardado</span>
+          </div>
         </div>
 
         <!-- Observaciones -->
@@ -2146,6 +2173,24 @@
     document.getElementById('md-pago-obs').value   = '';
     document.getElementById('md-pago-error').style.display = 'none';
 
+    // Selector de box — pre-llenar con el actual y limpiar estilos previos
+    const boxSelect = document.getElementById('md-box-select');
+    if (boxSelect) {
+      boxSelect.value = d.box_id || '';
+      boxSelect.style.borderColor = '';
+      boxSelect.style.boxShadow = '';
+    }
+    const bw = document.getElementById('md-box-warning');
+    const bs = document.getElementById('md-box-saved');
+    if (bw) {
+      bw.style.display = 'none';
+      // Reset al estilo ámbar (default cuando es alerta de doble-booking)
+      bw.style.background = '';
+      bw.style.borderColor = '';
+      bw.style.color = '';
+    }
+    if (bs) bs.style.display = 'none';
+
     // Links de ficha clínica + registro de atención
     actualizarBotonesFicha(d);
 
@@ -2186,6 +2231,46 @@
         linkCrear.href = `/pacientes/${d.paciente_id}/ficha/?nuevo_para_cita=${d.id}`;
       }
     }
+  }
+
+  /* Actualiza el box de la cita vía AJAX. Muestra alerta si hay doble-booking. */
+  function actualizarBoxCita(selectEl) {
+    if (!_cita || !_cita.id) return;
+    const warningEl = document.getElementById('md-box-warning');
+    const savedEl = document.getElementById('md-box-saved');
+    warningEl.style.display = 'none';
+    savedEl.style.display = 'none';
+
+    const formData = new FormData();
+    formData.append('box', selectEl.value);
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    fetch(`/citas/${_cita.id}/box/`, { method: 'POST', body: formData })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) {
+          warningEl.textContent = data.error;
+          warningEl.style.display = '';
+          return;
+        }
+        // Actualizar local
+        _cita.box_id = data.box_id;
+        _cita.box_nombre = data.box_nombre;
+        _needsReload = true;  // marcar para refrescar al cerrar
+
+        // Mostrar warning si hay doble-booking
+        if (data.warning) {
+          warningEl.textContent = data.warning;
+          warningEl.style.display = '';
+        } else {
+          savedEl.style.display = '';
+          setTimeout(() => { savedEl.style.display = 'none'; }, 2000);
+        }
+      })
+      .catch(err => {
+        warningEl.textContent = 'Error al guardar el box: ' + err;
+        warningEl.style.display = '';
+      });
   }
 
   function renderEstados(estadoActual) {
@@ -2307,8 +2392,49 @@
         if (ESTADOS_FINALES.includes(data.estado)) {
           document.getElementById('md-footer-main').querySelector('button').style.display = 'none';
         }
+      } else if (data.requiere_box) {
+        // Validación: hace falta box para marcar "Asistió"
+        mostrarErrorRequiereBox(data.error);
+      } else if (data.error) {
+        // Otro error genérico
+        alert(data.error);
       }
     } catch(e) { console.error(e); }
+  }
+
+  /* Resalta la sección de box y muestra mensaje cuando se intenta marcar
+     "Asistió" sin tener un box asignado. */
+  function mostrarErrorRequiereBox(mensaje) {
+    const section = document.getElementById('md-box-section');
+    const select = document.getElementById('md-box-select');
+    const warning = document.getElementById('md-box-warning');
+    if (!section || !select || !warning) return;
+
+    // Resaltar el select con borde rojo + animación
+    select.style.borderColor = '#c41c3b';
+    select.style.boxShadow = '0 0 0 3px rgba(196,28,59,0.15)';
+
+    // Mostrar mensaje sobre el select
+    warning.textContent = '⚠️ ' + mensaje;
+    warning.style.background = '#fbe6e6';
+    warning.style.borderColor = '#f3b6b6';
+    warning.style.color = '#9d2024';
+    warning.style.display = '';
+
+    // Scroll al box y enfocar
+    section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => select.focus(), 350);
+
+    // Cuando el usuario seleccione algo, limpiar el warning
+    const onChange = () => {
+      select.style.borderColor = '';
+      select.style.boxShadow = '';
+      warning.style.background = '';
+      warning.style.borderColor = '';
+      warning.style.color = '';
+      select.removeEventListener('change', onChange);
+    };
+    select.addEventListener('change', onChange);
   }
 
   function togglePagoForm() {
