@@ -520,6 +520,39 @@
   .cal-col-inner:hover .cal-slot-btn { opacity: 0.85; }
   .cal-slot-btn:hover { opacity: 1 !important; background: var(--accent-light); }
 
+  /* Bloque de DESCANSO/COLACIÓN — no clicable, patrón rayado */
+  .cal-descanso {
+    position: absolute; left: 2px; right: 2px;
+    background-color: #f5f5f3;
+    background-image: repeating-linear-gradient(
+      135deg,
+      transparent 0,
+      transparent 6px,
+      rgba(0,0,0,0.06) 6px,
+      rgba(0,0,0,0.06) 8px
+    );
+    border-radius: 6px;
+    border: 1px solid rgba(0,0,0,0.07);
+    z-index: 2;
+    padding: 6px 9px;
+    cursor: not-allowed;
+    display: flex; flex-direction: column; justify-content: flex-start;
+    overflow: hidden;
+    pointer-events: auto;
+  }
+  .cal-descanso .descanso-rango {
+    font-size: 0.7rem; font-weight: 500;
+    color: var(--text-secondary);
+    letter-spacing: 0.01em;
+  }
+  .cal-descanso .descanso-lbl {
+    font-size: 0.74rem; font-weight: 600;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 2px;
+  }
+
   /* Tarjeta de cita — moderno con sombras suaves */
   .cal-event {
     position: absolute; left: 4px; right: 4px; border-radius: 10px;
@@ -1326,6 +1359,16 @@
             {% if hora_now_top and item.es_hoy %}
             <div class="cal-now-line" style="top:{{ hora_now_top }}px;"></div>
             {% endif %}
+
+            {# ── Bloques de descanso/colación (NO clicables) ── #}
+            {% for d in item.descansos_render %}
+            <div class="cal-descanso"
+                 style="top:{{ d.top_px }}px; height:{{ d.height_px }}px;"
+                 title="Profesional en colación de {{ d.inicio }} a {{ d.fin }}">
+              <div class="descanso-rango">{{ d.inicio }} – {{ d.fin }}</div>
+              <div class="descanso-lbl">Almuerzo</div>
+            </div>
+            {% endfor %}
 
             {% for slot in item.slots_render %}
             <button class="cal-slot-btn"

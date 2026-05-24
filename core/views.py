@@ -162,6 +162,29 @@ def agenda_view(request):
                 "tiene_horarios": bool(agenda),
             })
 
+    # ── Marcar bloques de DESCANSO/COLACIÓN ─────────────────────────────
+    # utils.obtener_agenda_completa() solo expone bloques disponibles/ocupados
+    # sin considerar el descanso. Aquí cruzamos con HorarioProfesional para
+    # marcar los bloques que caen dentro del rango de colación como estado
+    # "descanso" — el template los renderiza como NO clicables.
+    for item in agenda_general:
+        prof = item['profesional']
+        dia = item['dia']
+        horario = HorarioProfesional.objects.filter(
+            profesional=prof, dia_semana=dia.weekday(), activo=True
+        ).first()
+        if not horario or not horario.tiene_descanso:
+            continue
+        if not (horario.inicio_descanso and horario.fin_descanso):
+            continue
+        ini, fin = horario.inicio_descanso, horario.fin_descanso
+        for hora, bloque in item['agenda'].items():
+            # Un bloque cae en descanso si su inicio está dentro del rango
+            if ini <= hora < fin and not bloque.get('cita'):
+                bloque['estado'] = 'descanso'
+                bloque['descanso_inicio'] = ini.strftime('%H:%M')
+                bloque['descanso_fin'] = fin.strftime('%H:%M')
+
     if todas_las_horas:
         # Rango común: del mínimo al máximo, slots de 15 minutos.
         from datetime import time
@@ -219,6 +242,7 @@ def agenda_view(request):
             seen_citas = set()
             citas_render = []
             slots_render = []
+            descansos_render = []
             for bloque in sorted(item['agenda'].values(), key=lambda b: b['hora']):
                 h = bloque['hora']
                 m_off = h.hour * 60 + h.minute - base_minutes
@@ -247,6 +271,23 @@ def agenda_view(request):
                             'top_px': top_px,
                             'height_px': max((dur // 15) * SLOT_H, SLOT_H) - 3,
                         })
+                elif bloque.get('estado') == 'descanso':
+                    # Renderizar SOLO el primer bloque del descanso. Los siguientes
+                    # bloques del mismo rango se omiten porque están cubiertos por
+                    # la altura del primero.
+                    ini = bloque.get('descanso_inicio', '')
+                    fin = bloque.get('descanso_fin', '')
+                    if ini and h.strftime('%H:%M') == ini:
+                        ini_h, ini_m = map(int, ini.split(':'))
+                        fin_h, fin_m = map(int, fin.split(':'))
+                        dur_min = (fin_h * 60 + fin_m) - (ini_h * 60 + ini_m)
+                        descansos_render.append({
+                            'inicio': ini,
+                            'fin': fin,
+                            'top_px': top_px,
+                            'height_px': max((dur_min // 15) * SLOT_H, SLOT_H),
+                        })
+                    # NO agregar a slots_render → no se puede clicar
                 else:
                     slots_render.append({
                         'hora': h.strftime('%H:%M'),
@@ -254,6 +295,7 @@ def agenda_view(request):
                     })
             item['citas_render'] = citas_render
             item['slots_render'] = slots_render
+            item['descansos_render'] = descansos_render
 
         total_height_px = total_slots * SLOT_H
     else:
@@ -262,6 +304,7 @@ def agenda_view(request):
         for item in agenda_general:
             item['citas_render'] = []
             item['slots_render'] = []
+            item['descansos_render'] = []
 
     # Navegación: en modo semana saltamos de 7 en 7 días; en modo día, 1.
     salto_dias = 7 if vista_semana else 1
