@@ -633,18 +633,9 @@ def reagendar_cita(request, cita_id):
 
 
 # ── DESCUENTOS ────────────────────────────────────────────────────────────
-@login_required
-def descuentos_pendientes_view(request):
-    """Vista para gestionar descuentos pendientes de autorización"""
-    descuentos = Descuento.objects.select_related('cita__paciente', 'cita__servicio').filter(
-        estado='pendiente'
-    ).order_by('-fecha_solicitud')
-
-    context = {
-        'descuentos': descuentos,
-        'total_pendientes': descuentos.count(),
-    }
-    return render(request, 'core/descuentos_pendientes.html', context)
+# NOTA: la vista descuentos_pendientes_view real está más abajo (busca por
+# nombre). Aquí había una definición duplicada que se eliminó porque Python
+# la sobrescribía con la de más abajo y causaba confusión.
 
 
 @login_required
@@ -1333,9 +1324,14 @@ def descuentos_pendientes_view(request):
         estado='pendiente'
     ).select_related('cita__paciente', 'cita__servicio').order_by('-fecha_solicitud')
 
+    # Suma total de los descuentos pendientes (se mostraba en el template
+    # via |sum que no existe en Django built-ins; ahora se calcula aquí).
+    monto_total = descuentos.aggregate(total=Sum('monto_descuento'))['total'] or 0
+
     context = {
         'descuentos': descuentos,
         'total': descuentos.count(),
+        'monto_total': monto_total,
     }
     return render(request, 'core/descuentos_pendientes.html', context)
 
