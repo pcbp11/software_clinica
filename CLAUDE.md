@@ -72,6 +72,17 @@ software_clinica/
   - Tipos: porcentaje, fijo_por_servicio, sociedad_carro, clinica_salud_70_30
 - **ComisionCalculada**: Registro histórico de cálculos mensuales
 
+### Boxes de Atención ⭐ NUEVO (25 mayo 2026)
+- **Box**: Espacios físicos donde se realizan atenciones
+  - `numero` (único por sucursal), `nombre`, `descripcion`, `activo`
+  - `es_acceso_universal` (Box 11) y `fecha_inicio_uso` (Box 10 desde 29/05)
+  - M2M `profesionales_habituales` y `servicios_disponibles`
+  - 11 boxes precargados desde el documento real de la clínica
+  - Property `disponible_hoy` (False si `fecha_inicio_uso > date.today()`)
+- **Cita.box** (FK opcional): asignable al crear, modificable después
+  - Validación: obligatorio al marcar estado="asistió"
+  - Doble-booking detectado (alerta, no prohibición)
+
 ### Sistema de Ficha Clínica ⭐ NUEVO
 - **FichaClinicaPaciente**: Antecedentes médicos (1 por paciente, OneToOne)
   - Alergias, enfermedades crónicas, medicamentos, cirugías previas, antecedentes estéticos
@@ -98,7 +109,89 @@ software_clinica/
 
 ## ✅ Features completadas
 
-### Sesión Actual (23-24 mayo 2026) — Pacientes + Ficha Clínica + Polish UX
+### Sesión Actual (25 mayo 2026) — Boxes de atención + Validaciones de cierre + Colación bloqueada
+
+#### 🏢 Sistema de Boxes de atención ⭐ (la feature principal de la sesión)
+
+**Modelos** (`core/models.py` + migraciones 0028 y 0029):
+- `Box` con: número (único por sucursal), nombre, descripción, `es_acceso_universal` (Box 11), `fecha_inicio_uso` (Box 10 desde 29/05), `activo`, M2M `profesionales_habituales`, M2M `servicios_disponibles`
+- Campo `box` FK opcional en `Cita` (asignable al crear, modificable después)
+- Migración `0029_seed_boxes_iniciales` **precarga los 11 boxes reales** del documento "DISTRIBUCIÓN DE BOX Y PRESTACIONES.docx":
+  - Box 1: Sala de Procedimientos — Carolina Carmona + Dr Claudio Rodriguez
+  - Box 2: Sala de Procedimientos + Botiquín — Paola Bonaldi + María José Moyano
+  - Box 3: Sala de Procedimientos — Paola Bonaldi + Vittorio Zaffiri
+  - Box 4: Multidisciplinar — Daniela Maldonado + Vittorio Zaffiri
+  - Box 5: Cosmetología — María José Uribe
+  - Box 6: Nutrición + Holístico — Ignacio Diaz + Nutricionistas
+  - Box 7: Corporales/Kinesiología — Daniela Maldonado
+  - Box 8: Consultas — Paola Bonaldi
+  - Box 9: Oftalmología — Cristiano Burela
+  - Box 10: Procedimientos Ginecológicos (desde 29/05) — Migdalia + Hector Pinto
+  - Box 11: Acceso Universal — Paulina Cerda
+
+**Vistas** (`core/views.py`):
+- `boxes_view` — lista con búsqueda, filtros, stats (Total/Activos/Universal)
+- `crear_box`, `editar_box`, `toggle_box`, `eliminar_box` — CRUD completo
+- `actualizar_box_cita` — endpoint AJAX para cambiar el box de una cita desde el modal de detalle
+- Helper `_detectar_doble_booking_box()` — chequea overlap considerando duración del servicio (no solo hora_inicio exacta)
+
+**URLs**: 6 rutas nuevas (`/boxes/` + crear/editar/toggle/eliminar + AJAX update por cita)
+
+**Template `boxes.html`**:
+- Lista al estilo unificado del proyecto (stats-mini + filtros + tabla)
+- Cada fila muestra: número en círculo verde, nombre, descripción, badges UNIVERSAL/Desde-fecha, pills de profesionales habituales (verdes), pills de servicios (primeros 4 + "más"), estado activo/inactivo
+- Modal de crear/editar con grid 2-col: número + sucursal, nombre, descripción, fecha inicio + checkbox universal
+- **Multi-select con buscador en vivo** para profesionales y servicios (sin libraries — vanilla JS)
+- Sidebar: link "Boxes" en grupo Configuración (arriba de Categorías)
+
+#### 🔗 Integración Boxes ↔ Agenda
+
+**Modal "Nueva cita"**:
+- Campo "Box de atención (opcional)" en grid 2-col junto a Profesional
+- `boxes_activos` pasado desde `agenda_view`
+- Backend (`crear_cita`): guarda el box; si hay doble-booking detectado, muestra alerta amarilla con `messages.warning` pero NO bloquea el guardado
+
+**Modal "Detalle de cita"**:
+- Nueva sección "Box de atención" entre Estado y Observaciones
+- Dropdown con todos los boxes activos + opción "— Sin asignar —"
+- **Auto-guardado AJAX** al cambiar selección → muestra "✓ Guardado" verde
+- Si hay doble-booking, muestra pill ámbar inline (no bloquea)
+- `detalle_cita` (JSON) ahora expone `box_id` y `box_nombre`
+
+#### 🔒 Validación obligatoria: Box al marcar "Asistió"
+
+- Backend `actualizar_estado_cita`: si `nuevo_estado == 'asistio'` y `cita.box is None`, rebota con HTTP 400 + `{ error, requiere_box: true }`
+- Frontend (`cambiarEstado`): detecta `requiere_box` en respuesta y dispara `mostrarErrorRequiereBox()`:
+  - Resalta el select de box con **borde rojo + sombra**
+  - Muestra mensaje inline sobre el select: "⚠️ Debes asignar un box antes de marcar Asistió"
+  - Scroll suave a la sección Box
+  - Focus en el dropdown
+  - Listener que limpia los estilos rojos apenas el usuario selecciona algo
+- Otros estados (Confirmado, En espera, Cancelada, etc.) NO requieren box
+- Patrón listo para reutilizar cuando agreguemos validación de insumos
+
+#### 🕐 Colación bloqueada visualmente en la agenda
+
+**Problema previo**: la franja de descanso del profesional aparecía como slots clicables, y solo rechazaba al guardar con un mensaje reactivo. Mala UX.
+
+**Ahora**:
+- `agenda_view` cruza con `HorarioProfesional` para cada profesional del día. Si `tiene_descanso=True`, los bloques que caen en el rango `(inicio_descanso, fin_descanso)` se marcan con `estado='descanso'` + `descanso_inicio/fin`
+- Loop de render separa los bloques de descanso a una nueva lista `descansos_render` (no entran a `slots_render`, por lo tanto no hay botón clicable)
+- Template: nueva clase CSS `.cal-descanso` con:
+  - Fondo gris claro con **rayado diagonal** (`repeating-linear-gradient 135deg`)
+  - `cursor: not-allowed`
+  - Etiqueta **"ALMUERZO"** + rango horario "13:00 – 14:00"
+  - Title attribute con info
+- **Compatible con modo día y modo semana**
+- **No modifiqué `utils.py`** (respetando restricción del proyecto); la lógica se inyecta como post-procesamiento en `agenda_view`
+
+#### 🐛 Fix de bug detectado durante revisión
+
+- `templates/core/descuentos_pendientes.html` usaba `{% widthratio descuentos|dictsort:"monto_descuento"|sum 1 1 %}` — el filtro `|sum` NO existe en Django built-ins. Habría fallado en `/descuentos/pendientes/` con descuentos en lista
+- Fix: calcular total con `Sum('monto_descuento')` en la vista, formatear con filtro `|pesos` en el template
+- También limpieza: había **2 definiciones** de `descuentos_pendientes_view` (líneas 637 y 1327); Python sobrescribía la primera. Eliminé la duplicada obsoleta
+
+### Sesión anterior (23-24 mayo 2026) — Pacientes + Ficha Clínica + Polish UX
 
 #### 🔧 Fixes y mejoras en modal "Nueva cita"
 - ✓ **Bug timezone del mini-calendario**: `new Date('YYYY-MM-DD')` parseaba como UTC y al formatear en zona horaria local retrocedía un día. Fix: construir `Date` con componentes locales.
@@ -248,32 +341,50 @@ software_clinica/
 
 ## 📝 Features pendientes
 
-### 🔴 Prioridad 1 - Core
-1. **Templates pendientes** (backend ya listo, solo falta el HTML)
-   - `templates/core/horarios.html` — view `horarios_view` + URLs ya registradas
-   - `templates/core/servicios.html` — view `servicios_view` + URLs ya registradas
-   - `templates/core/usuarios.html` — view `usuarios_view` + URLs ya registradas
+### 🔴 Prioridad 1 - Próxima sesión
 
-### 🟠 Prioridad 1.5 - Conversado y aprobado, pendiente implementar
+1. **Insumos obligatorios al marcar "Asistió"** ⭐ — última pieza del flujo de cierre de cita
+   - Modelo nuevo `InsumoUsadoEnCita` (FK Cita + FK Insumo + cantidad + auditoría)
+   - Modal interceptor del cambio de estado a "asistió" (mismo patrón que box):
+     - Pre-llenar con `ServicioInsumo` del servicio
+     - Recepción ajusta cantidades reales y confirma
+     - Backend valida que haya al menos 1 insumo confirmado
+     - UX consistente con la validación de box (rojo, scroll, focus)
+   - Decremento automático de stock con reversión en cancelada
+   - Admin override permitido para testing
+   - **El patrón UX ya está listo** desde la validación de box — solo replicar
+   - Detalle completo en `TAREAS.md`
 
-2. **Google + Microsoft OAuth (django-allauth)** — conversado en sesión actual:
-   - Allowlist obligatorio (el admin pre-registra emails que pueden hacer login)
-   - Soporta Google (Workspace y Gmail gratuito) + Microsoft (Hotmail/Outlook)
-   - Botones en `login.html` además del fallback email/password
-   - Requiere crear proyecto en Google Cloud Console + obtener credentials
-   - HTTPS requerido en producción (en dev funciona con localhost)
+### 🔴 Prioridad 1.5 - Core (backend listo, falta HTML)
+- `templates/core/horarios.html` — view `horarios_view` + URLs ya registradas
+- `templates/core/servicios.html` — view `servicios_view` + URLs ya registradas
+- `templates/core/usuarios.html` — view `usuarios_view` + URLs ya registradas
 
-3. **Consentimiento de paciente para datos clínicos** (Ley 19.628 / 21.719):
-   - Checkbox + fecha + IP en primer acceso a ficha clínica
-   - Botón "Exportar mi ficha" (derecho de acceso)
-   - Versión MVP actual NO incluye este paso
+### 🟠 Prioridad 2 - Conversado y aprobado
 
-### 🟡 Prioridad 2 - Admin & Reportes
+- **Google + Microsoft OAuth (django-allauth)**:
+  - Allowlist obligatorio (el admin pre-registra emails que pueden hacer login)
+  - Soporta Google (Workspace y Gmail gratuito) + Microsoft (Hotmail/Outlook)
+  - Botones en `login.html` además del fallback email/password
+  - Requiere crear proyecto en Google Cloud Console + obtener credentials
+  - HTTPS requerido en producción (en dev funciona con localhost)
+
+- **Consentimiento de paciente para datos clínicos** (Ley 19.628 / 21.719):
+  - Checkbox + fecha + IP en primer acceso a ficha clínica
+  - Botón "Exportar mi ficha" (derecho de acceso)
+  - Versión MVP actual NO incluye este paso
+
+- **Asignación M2M de profesionales/servicios a los boxes precargados**:
+  - Los 11 boxes ya están en BD con descripciones detalladas
+  - Falta que la admin entre a `/boxes/<id>/editar/` y vincule los profesionales y servicios reales (los M2M vienen vacíos)
+  - Cuando estén poblados, el dropdown de box al crear cita podría auto-sugerir según prof+servicio (mejora futura)
+
+### 🟡 Prioridad 3 - Admin & Reportes
 - Dashboard mejorado con gráficos (recaudación, servicios populares)
 - Reportes exportables (Excel, PDF)
 - Integración Google Sheets (backup administrativo)
 
-### 🟢 Prioridad 3 - Polish identificado pero no urgente
+### 🟢 Prioridad 4 - Polish identificado pero no urgente
 - Overlay explícito "Profesional no disponible HH:MM – HH:MM" en franjas no laborales de vista semanal
 - Auto-formato de RUT también en formulario de Pacientes (consistencia con Profesionales y Proveedores)
 - Eliminar función `formatearFecha` huérfana en `agenda.html` (no se usa post-refactor de Flatpickr)
@@ -350,7 +461,8 @@ software_clinica/
 - Para hora chilena en JS: `Intl.DateTimeFormat('en-GB', { timeZone: 'America/Santiago', hour: '2-digit', minute: '2-digit', hour12: false })`
 - Cuando pases data Python → JS: usa SIEMPRE `{{ var|json_script:"id" }}` + `JSON.parse(document.getElementById('id').textContent)`. NO uses `|escapejs|stringformat` (rompe con `%` en strings).
 - Cuando accedas a `OneToOneField` inverso: usa `try/except DoesNotExist` o `hasattr` con cuidado.
-- **Última migración**: 0027 (servicio + aparatologia en RegistroAtencion)
+- **Última migración**: 0029_seed_boxes_iniciales (precarga 11 boxes desde documento real)
+- **Para correr el server**: SIEMPRE activar el venv primero (`.venv\Scripts\Activate.ps1`) o usar `.venv\Scripts\python.exe manage.py runserver`. Sin venv da error de Pillow (los `ImageField` necesitan la lib instalada solo en `.venv`).
 - Para `ImageField` se requiere `Pillow` instalado (`pip install Pillow`)
 - Para servir media en dev: actualmente las fotos clínicas se sirven vía vista Django auth-protected, no necesitan MEDIA_URL configurado en urls.py.
 - BD tiene datos de prueba (db.sqlite3 existente)
@@ -358,7 +470,41 @@ software_clinica/
 
 ---
 
-## 🔄 Archivos Clave Modificados (sesión actual — 23-24 mayo 2026)
+## 🔄 Archivos Clave Modificados (sesión actual — 25 mayo 2026)
+
+### Modelos & migraciones
+- **core/models.py**: nuevo modelo `Box` con M2M a Profesional y Servicio + FK opcional `box` en `Cita`
+- **core/migrations/0028_box_cita_box_***: migración estructural
+- **core/migrations/0029_seed_boxes_iniciales.py**: data migration con los 11 boxes reales
+
+### Vistas
+- **core/views.py**:
+  - `agenda_view`: nueva queryset `boxes_activos`, cruza con `HorarioProfesional` para marcar bloques de descanso con `estado='descanso'`, separa render en `slots_render` (clicables) y `descansos_render` (no clicables)
+  - `crear_cita`: acepta `box` desde POST, detecta doble-booking, emite warning sin bloquear
+  - `detalle_cita` (JSON): expone `box_id` y `box_nombre`
+  - `actualizar_estado_cita`: valida que cita tenga box al cambiar a "asistio" — retorna `{ error, requiere_box: true }` con HTTP 400
+  - **6 vistas nuevas para Box**: `boxes_view`, `crear_box`, `editar_box`, `toggle_box`, `eliminar_box`, `actualizar_box_cita`
+  - Helper `_detectar_doble_booking_box()` (considera duración del servicio para overlap)
+  - **Bug fix**: eliminada definición duplicada de `descuentos_pendientes_view` (sobrescribía a la real)
+  - Mejora: `descuentos_pendientes_view` calcula `monto_total` con `Sum()`
+
+### URLs
+- **config/urls.py**: 6 rutas para boxes (`/boxes/`, crear, editar, toggle, eliminar) + `/citas/<id>/box/` (AJAX update)
+
+### Templates
+- **templates/core/boxes.html** (NEW): lista de boxes con multi-select buscador en vivo para profesionales y servicios
+- **templates/core/base.html**: link "Boxes" en sidebar grupo Configuración
+- **templates/core/agenda.html**:
+  - Modal "Nueva cita": campo Box (opcional) en grid 2-col junto a Profesional
+  - Modal detalle: nueva sección "Box de atención" con dropdown auto-guardado (AJAX)
+  - JS `actualizarBoxCita()` y `mostrarErrorRequiereBox()` con UX rojo + scroll + focus
+  - Nuevo CSS `.cal-descanso` con rayado diagonal y cursor not-allowed para colación
+  - Render: `descansos_render` separado de `slots_render` (no clicables)
+- **templates/core/descuentos_pendientes.html**: load `clinica_tags`, monto total con filtro `|pesos` reemplaza el `|sum` que no existía
+
+---
+
+## 🔄 Archivos Modificados (sesión anterior — 23-24 mayo 2026)
 
 ### Modelos & migraciones
 - **core/models.py**: agregados 4 modelos (FichaClinicaPaciente, RegistroAtencion, FotoEvolucion, AuditLogFicha) + 2 campos en RegistroAtencion (servicio FK, aparatologia)
